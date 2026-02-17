@@ -1,0 +1,27 @@
+{
+  "_source": "Hull, J.C. 'Options, Futures, and Other Derivatives' (11th ed.), Chapter 15",
+  "_methodology": "Black-Scholes-Merton model with continuous dividends",
+  "reference_inputs": {
+    "spot": 100.0,
+    "strike": 100.0,
+    "time_to_expiry": 1.0,
+    "risk_free_rate": 0.05,
+    "implied_volatility": 0.20
+  },
+  "call": {
+    "price": 10.4506,
+    "delta": 0.6368,
+    "gamma": 0.0188,
+    "theta": -6.4140,
+    "vega": 37.5240,
+    "rho": 53.2325
+  },
+  "put": {
+    "price": 5.5735,
+    "delta": -0.3632,
+    "gamma": 0.0188,
+    "theta": -1.5364,
+    "vega": 37.5240,
+    "rho": -41.8905
+  }
+}
