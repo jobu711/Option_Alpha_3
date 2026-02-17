@@ -1,8 +1,18 @@
-"""Scan models: tracking scan runs and ticker scoring results."""
+"""Scan models: tracking scan runs, ticker scoring, and watchlist metadata."""
 
 import datetime
 
 from pydantic import BaseModel, ConfigDict
+
+
+class WatchlistSummary(BaseModel):
+    """Summary of a saved watchlist."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    name: str
+    created_at: str
 
 
 class ScanRun(BaseModel):
