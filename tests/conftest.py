@@ -11,6 +11,7 @@ import pytest
 
 from Option_Alpha.models import (
     AgentResponse,
+    GreeksCited,
     HealthStatus,
     MarketContext,
     OptionContract,
@@ -135,7 +136,7 @@ def sample_agent_response() -> AgentResponse:
         key_points=["RSI oversold bounce", "MACD bullish crossover"],
         conviction=0.72,
         contracts_referenced=["AAPL 185C 2025-02-21"],
-        greeks_cited={"delta": 0.45, "theta": -0.08},
+        greeks_cited=GreeksCited(delta=0.45, theta=-0.08),
         model_used="claude-sonnet-4-5-20250929",
         input_tokens=500,
         output_tokens=200,
