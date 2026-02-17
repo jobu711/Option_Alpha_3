@@ -23,12 +23,11 @@ import pandas as pd
 import pytest
 
 from Option_Alpha.models.market_data import OHLCV, Quote, TickerInfo
+from Option_Alpha.services._helpers import safe_decimal, safe_int
 from Option_Alpha.services.cache import ServiceCache
 from Option_Alpha.services.market_data import (
     MarketDataService,
     _classify_market_cap,
-    _safe_decimal,
-    _safe_int,
 )
 from Option_Alpha.services.rate_limiter import RateLimiter
 from Option_Alpha.utils.exceptions import (
@@ -119,7 +118,7 @@ class TestFetchOHLCV:
 
         assert len(bars) == 200
         assert all(isinstance(b, OHLCV) for b in bars)
-        assert bars[0].open == _safe_decimal(valid_ohlcv_df.iloc[0]["Open"])
+        assert bars[0].open == safe_decimal(valid_ohlcv_df.iloc[0]["Open"])
 
     @pytest.mark.asyncio()
     async def test_empty_dataframe_raises_ticker_not_found(
@@ -396,39 +395,39 @@ class TestFetchBatchOHLCV:
 
 
 class TestSafeDecimal:
-    """Tests for _safe_decimal() helper."""
+    """Tests for safe_decimal() helper."""
 
     def test_valid_number(self) -> None:
         """Converts a valid number to Decimal."""
-        assert _safe_decimal(1.05) == Decimal("1.05")
+        assert safe_decimal(1.05) == Decimal("1.05")
 
     def test_none_returns_zero(self) -> None:
         """None returns Decimal('0')."""
-        assert _safe_decimal(None) == Decimal("0")
+        assert safe_decimal(None) == Decimal("0")
 
     def test_nan_string_returns_zero(self) -> None:
         """'nan' string returns Decimal('0')."""
-        assert _safe_decimal("nan") == Decimal("0")
+        assert safe_decimal("nan") == Decimal("0")
 
     def test_inf_returns_zero(self) -> None:
         """'inf' returns Decimal('0')."""
-        assert _safe_decimal("inf") == Decimal("0")
+        assert safe_decimal("inf") == Decimal("0")
 
 
 class TestSafeInt:
-    """Tests for _safe_int() helper."""
+    """Tests for safe_int() helper."""
 
     def test_valid_int(self) -> None:
         """Converts a valid number to int."""
-        assert _safe_int(42) == 42
+        assert safe_int(42) == 42
 
     def test_none_returns_zero(self) -> None:
         """None returns 0."""
-        assert _safe_int(None) == 0
+        assert safe_int(None) == 0
 
     def test_float_truncates(self) -> None:
         """Float is truncated to int."""
-        assert _safe_int(3.9) == 3
+        assert safe_int(3.9) == 3
 
 
 class TestClassifyMarketCap:

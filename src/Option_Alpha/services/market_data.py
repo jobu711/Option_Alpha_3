@@ -12,14 +12,19 @@ import asyncio
 import datetime
 import json
 import logging
-from collections.abc import Callable, Coroutine
-from decimal import Decimal, InvalidOperation
-from typing import Any, Final, TypeVar
+from typing import Final
 
 import pandas as pd
 import yfinance as yf  # type: ignore[import-untyped]
 
 from Option_Alpha.models.market_data import OHLCV, Quote, TickerInfo
+from Option_Alpha.services._helpers import (
+    EXTERNAL_CALL_TIMEOUT_SECONDS,
+    YFINANCE_SOURCE,
+    fetch_with_retry,
+    safe_decimal,
+    safe_int,
+)
 from Option_Alpha.services.cache import (
     DATA_TYPE_FUNDAMENTALS,
     DATA_TYPE_OHLCV,
@@ -35,19 +40,11 @@ from Option_Alpha.utils.exceptions import (
 
 logger = logging.getLogger(__name__)
 
-_T = TypeVar("_T")
-
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
 
-YFINANCE_SOURCE: Final[str] = "yfinance"
 DEFAULT_PERIOD: Final[str] = "1y"
-EXTERNAL_CALL_TIMEOUT_SECONDS: Final[float] = 30.0
-
-# Retry configuration
-MAX_RETRIES: Final[int] = 3
-BACKOFF_DELAYS: Final[list[float]] = [1.0, 2.0, 4.0]
 
 # Minimum rows required for a valid OHLCV fetch (~200 trading days/year)
 MIN_OHLCV_ROWS: Final[int] = 100
@@ -60,35 +57,6 @@ OHLCV_COLUMN_MAP: Final[dict[str, str]] = {
     "Close": "close",
     "Volume": "volume",
 }
-
-
-def _safe_decimal(value: object) -> Decimal:
-    """Convert a numeric value to Decimal via string to preserve precision.
-
-    Falls back to ``Decimal("0")`` for NaN / None / unparseable values.
-    """
-    if value is None:
-        return Decimal("0")
-    try:
-        str_val = str(value)
-        if str_val in ("nan", "inf", "-inf", "None"):
-            return Decimal("0")
-        return Decimal(str_val)
-    except (InvalidOperation, ValueError):
-        return Decimal("0")
-
-
-def _safe_int(value: object) -> int:
-    """Convert a numeric value to int, treating NaN/None as 0."""
-    if value is None:
-        return 0
-    try:
-        float_val = float(str(value))
-        if float_val != float_val:  # NaN check without numpy
-            return 0
-        return int(float_val)
-    except (ValueError, TypeError):
-        return 0
 
 
 class MarketDataService:
@@ -151,9 +119,11 @@ class MarketDataService:
             return _deserialize_ohlcv_list(cached)
 
         # Fetch from yfinance with retry
-        raw_df = await self._fetch_with_retry(
+        raw_df = await fetch_with_retry(
             lambda: self._fetch_raw_history(ticker, period),
+            rate_limiter=self._rate_limiter,
             ticker=ticker,
+            source=YFINANCE_SOURCE,
             label=f"OHLCV({ticker})",
         )
 
@@ -190,9 +160,11 @@ class MarketDataService:
             logger.debug("Cache hit for quote: %s", cache_key)
             return Quote.model_validate_json(cached)
 
-        info = await self._fetch_with_retry(
+        info = await fetch_with_retry(
             lambda: self._fetch_raw_info(ticker),
+            rate_limiter=self._rate_limiter,
             ticker=ticker,
+            source=YFINANCE_SOURCE,
             label=f"Quote({ticker})",
         )
 
@@ -200,10 +172,10 @@ class MarketDataService:
 
         quote = Quote(
             ticker=ticker,
-            bid=_safe_decimal(info.get("bid", 0)),
-            ask=_safe_decimal(info.get("ask", 0)),
-            last=_safe_decimal(info.get("currentPrice") or info.get("regularMarketPrice", 0)),
-            volume=_safe_int(info.get("volume") or info.get("regularMarketVolume", 0)),
+            bid=safe_decimal(info.get("bid", 0)),
+            ask=safe_decimal(info.get("ask", 0)),
+            last=safe_decimal(info.get("currentPrice") or info.get("regularMarketPrice", 0)),
+            volume=safe_int(info.get("volume") or info.get("regularMarketVolume", 0)),
             timestamp=datetime.datetime.now(datetime.UTC),
         )
 
@@ -233,9 +205,11 @@ class MarketDataService:
             logger.debug("Cache hit for ticker info: %s", cache_key)
             return TickerInfo.model_validate_json(cached)
 
-        info = await self._fetch_with_retry(
+        info = await fetch_with_retry(
             lambda: self._fetch_raw_info(ticker),
+            rate_limiter=self._rate_limiter,
             ticker=ticker,
+            source=YFINANCE_SOURCE,
             label=f"TickerInfo({ticker})",
         )
 
@@ -353,77 +327,6 @@ class MarketDataService:
         )
 
     # ------------------------------------------------------------------
-    # Retry wrapper
-    # ------------------------------------------------------------------
-
-    async def _fetch_with_retry(
-        self,
-        fetch_fn: Callable[[], Coroutine[Any, Any, _T]],
-        *,
-        ticker: str,
-        label: str,
-    ) -> _T:
-        """Retry a fetch coroutine with exponential backoff.
-
-        Catches broad ``Exception`` because yfinance raises inconsistent
-        types, then re-raises as ``DataSourceUnavailableError`` after
-        exhausting retries.
-
-        Args:
-            fetch_fn: Zero-argument callable returning a coroutine.
-            ticker: Ticker symbol for error context.
-            label: Human-readable label for log messages.
-
-        Returns:
-            Whatever *fetch_fn* returns.
-        """
-        last_exc: Exception | None = None
-
-        for attempt in range(MAX_RETRIES):
-            await self._rate_limiter.acquire()
-            try:
-                result = await fetch_fn()
-                return result
-            except (TickerNotFoundError, InsufficientDataError):
-                raise
-            except TimeoutError as exc:
-                last_exc = exc
-                logger.warning(
-                    "%s timed out (attempt %d/%d)",
-                    label,
-                    attempt + 1,
-                    MAX_RETRIES,
-                )
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-                logger.warning(
-                    "%s failed (attempt %d/%d): %s",
-                    label,
-                    attempt + 1,
-                    MAX_RETRIES,
-                    exc,
-                )
-            finally:
-                self._rate_limiter.release()
-
-            # Backoff before next retry (not after the last attempt)
-            if attempt < MAX_RETRIES - 1:
-                delay = (
-                    BACKOFF_DELAYS[attempt]
-                    if attempt < len(BACKOFF_DELAYS)
-                    else BACKOFF_DELAYS[-1]
-                )
-                await asyncio.sleep(delay)
-
-        # All retries exhausted
-        assert last_exc is not None  # noqa: S101
-        raise DataSourceUnavailableError(
-            f"Failed to fetch {label} after {MAX_RETRIES} retries: {last_exc}",
-            ticker=ticker,
-            source=YFINANCE_SOURCE,
-        )
-
-    # ------------------------------------------------------------------
     # Validation helpers
     # ------------------------------------------------------------------
 
@@ -499,11 +402,11 @@ class MarketDataService:
             try:
                 bar = OHLCV(
                     date=bar_date,
-                    open=_safe_decimal(row["Open"]),
-                    high=_safe_decimal(row["High"]),
-                    low=_safe_decimal(row["Low"]),
-                    close=_safe_decimal(row["Close"]),
-                    volume=_safe_int(row["Volume"]),
+                    open=safe_decimal(row["Open"]),
+                    high=safe_decimal(row["High"]),
+                    low=safe_decimal(row["Low"]),
+                    close=safe_decimal(row["Close"]),
+                    volume=safe_int(row["Volume"]),
                 )
                 bars.append(bar)
             except Exception:  # noqa: BLE001

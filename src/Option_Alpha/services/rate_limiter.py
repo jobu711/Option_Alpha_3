@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from collections.abc import Awaitable
+from collections.abc import Awaitable, Callable
 from typing import TypeVar
 
 from Option_Alpha.utils.exceptions import RateLimitExceededError
@@ -94,7 +94,7 @@ class RateLimiter:
 
     async def execute(
         self,
-        coro: Awaitable[T],
+        coro_factory: Callable[[], Awaitable[T]],
         *,
         ticker: str,
         source: str,
@@ -106,7 +106,9 @@ class RateLimiter:
         that value is used instead of the backoff delay.
 
         Args:
-            coro: The awaitable to execute (typically an HTTP fetch coroutine).
+            coro_factory: Zero-argument callable that returns a fresh
+                awaitable on each call.  A coroutine can only be awaited
+                once, so a factory is required for retries.
             ticker: Ticker symbol for error context.
             source: Data source name for error context.
 
@@ -121,7 +123,7 @@ class RateLimiter:
         for attempt in range(self._max_retries + 1):
             await self.acquire()
             try:
-                result: T = await coro
+                result: T = await coro_factory()
                 return result
             except RateLimitExceededError as exc:
                 last_exception = exc

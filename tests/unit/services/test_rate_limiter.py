@@ -3,7 +3,7 @@
 Covers:
 - acquire() blocks when semaphore is full
 - Token bucket correctly limits rate
-- execute() with a successful coroutine
+- execute() with a successful coroutine factory
 - execute() retries on RateLimitExceededError
 - execute() respects retry_after attribute on exception
 - execute() raises after exhausting max retries
@@ -16,8 +16,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import time
-from collections.abc import Callable, Coroutine
-from typing import Any
 
 import pytest
 
@@ -137,7 +135,7 @@ class TestExecute:
     async def test_execute_returns_result_on_success(self, fast_limiter: RateLimiter) -> None:
         """execute() returns the coroutine result on success."""
         result = await fast_limiter.execute(
-            _async_value("hello"),
+            lambda: _async_value("hello"),
             ticker="AAPL",
             source="test",
         )
@@ -147,10 +145,8 @@ class TestExecute:
     async def test_execute_retries_on_rate_limit_error(self, fast_limiter: RateLimiter) -> None:
         """execute() retries when RateLimitExceededError is raised.
 
-        The execute() method awaits the same ``coro`` object in a loop.
-        A regular coroutine cannot be re-awaited, so we use a
-        _ReAwaitableCallable that produces a fresh awaitable on each
-        ``__await__`` call, simulating the retry behavior.
+        The execute() method accepts a callable factory that produces a
+        fresh awaitable on each retry attempt.
         """
         call_count = 0
 
@@ -166,7 +162,7 @@ class TestExecute:
             return "success"
 
         result = await fast_limiter.execute(
-            _ReAwaitableCallable(flaky),
+            flaky,
             ticker="AAPL",
             source="test",
         )
@@ -206,7 +202,7 @@ class TestExecute:
 
         with pytest.raises(RateLimitExceededError, match="always limited"):
             await limiter.execute(
-                _ReAwaitableCallable(always_fail),
+                always_fail,
                 ticker="AAPL",
                 source="test",
             )
@@ -290,7 +286,7 @@ class TestCustomConfiguration:
 
         with pytest.raises(RateLimitExceededError):
             await limiter.execute(
-                _ReAwaitableCallable(always_fail),
+                always_fail,
                 ticker="X",
                 source="test",
             )
@@ -317,20 +313,3 @@ class TestCustomConfiguration:
 async def _async_value(value: str) -> str:
     """Return a value asynchronously (simple awaitable for testing)."""
     return value
-
-
-class _ReAwaitableCallable:
-    """An awaitable that calls a factory each time it is awaited.
-
-    The ``RateLimiter.execute()`` method awaits the same ``coro`` object
-    on every retry attempt.  A real coroutine object can only be awaited
-    once, but this wrapper calls *factory* (a zero-arg async callable)
-    every time ``__await__`` is invoked, producing a fresh coroutine each
-    time so that the retry loop works correctly in tests.
-    """
-
-    def __init__(self, factory: Callable[[], Coroutine[Any, Any, Any]]) -> None:
-        self._factory = factory
-
-    def __await__(self) -> Any:  # noqa: ANN401
-        return self._factory().__await__()

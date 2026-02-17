@@ -16,10 +16,8 @@ import asyncio
 import datetime
 import json
 import logging
-import math
-from collections.abc import Callable, Coroutine
-from decimal import Decimal, InvalidOperation
-from typing import Any, Final, TypeVar
+from decimal import Decimal
+from typing import Any, Final
 
 import pandas as pd
 import yfinance as yf  # type: ignore[import-untyped]
@@ -30,28 +28,23 @@ from Option_Alpha.models.enums import (
     SignalDirection,
 )
 from Option_Alpha.models.options import OptionContract, OptionGreeks
+from Option_Alpha.services._helpers import (
+    EXTERNAL_CALL_TIMEOUT_SECONDS,
+    YFINANCE_SOURCE,
+    fetch_with_retry,
+    safe_decimal,
+    safe_float,
+    safe_int,
+)
 from Option_Alpha.services.cache import DATA_TYPE_CHAIN, ServiceCache
 from Option_Alpha.services.rate_limiter import RateLimiter
-from Option_Alpha.utils.exceptions import (
-    DataSourceUnavailableError,
-    InsufficientDataError,
-    TickerNotFoundError,
-)
+from Option_Alpha.utils.exceptions import InsufficientDataError, TickerNotFoundError
 
 logger = logging.getLogger(__name__)
-
-_T = TypeVar("_T")
 
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-YFINANCE_SOURCE: Final[str] = "yfinance"
-EXTERNAL_CALL_TIMEOUT_SECONDS: Final[float] = 30.0
-
-# Retry configuration
-MAX_RETRIES: Final[int] = 3
-BACKOFF_DELAYS: Final[list[float]] = [1.0, 2.0, 4.0]
 
 # Expiration selection: target 45 DTE, acceptable range 30-60 DTE
 DTE_TARGET: Final[int] = 45
@@ -70,48 +63,6 @@ DELTA_FLOOR: Final[float] = -1.0
 DELTA_CEILING: Final[float] = 1.0
 GAMMA_FLOOR: Final[float] = 0.0
 VEGA_FLOOR: Final[float] = 0.0
-
-
-def _safe_decimal(value: object) -> Decimal:
-    """Convert a numeric value to Decimal via string.
-
-    Falls back to ``Decimal("0")`` for NaN / None / unparseable values.
-    """
-    if value is None:
-        return Decimal("0")
-    try:
-        str_val = str(value)
-        if str_val in ("nan", "inf", "-inf", "None"):
-            return Decimal("0")
-        return Decimal(str_val)
-    except (InvalidOperation, ValueError):
-        return Decimal("0")
-
-
-def _safe_int(value: object) -> int:
-    """Convert a numeric value to int, treating NaN/None as 0."""
-    if value is None:
-        return 0
-    try:
-        float_val = float(str(value))
-        if float_val != float_val:  # NaN check
-            return 0
-        return int(float_val)
-    except (ValueError, TypeError):
-        return 0
-
-
-def _safe_float(value: object) -> float:
-    """Convert a numeric value to float, treating NaN/None as 0.0."""
-    if value is None:
-        return 0.0
-    try:
-        float_val = float(str(value))
-        if math.isnan(float_val) or math.isinf(float_val):
-            return 0.0
-        return float_val
-    except (ValueError, TypeError):
-        return 0.0
 
 
 class OptionsDataService:
@@ -188,9 +139,11 @@ class OptionsDataService:
             return _deserialize_contract_list(cached)
 
         # Fetch raw chain from yfinance
-        raw_calls, raw_puts = await self._fetch_with_retry(
+        raw_calls, raw_puts = await fetch_with_retry(
             lambda: self._fetch_raw_option_chain(ticker, expiration_str),
+            rate_limiter=self._rate_limiter,
             ticker=ticker,
+            source=YFINANCE_SOURCE,
             label=f"OptionChain({ticker}, {expiration_str})",
         )
 
@@ -311,9 +264,11 @@ class OptionsDataService:
         """
         ticker = ticker.upper().strip()
 
-        raw_expirations = await self._fetch_with_retry(
+        raw_expirations = await fetch_with_retry(
             lambda: self._fetch_raw_expirations(ticker),
+            rate_limiter=self._rate_limiter,
             ticker=ticker,
+            source=YFINANCE_SOURCE,
             label=f"Expirations({ticker})",
         )
 
@@ -376,75 +331,6 @@ class OptionsDataService:
         )
 
     # ------------------------------------------------------------------
-    # Retry wrapper
-    # ------------------------------------------------------------------
-
-    async def _fetch_with_retry(
-        self,
-        fetch_fn: Callable[[], Coroutine[Any, Any, _T]],
-        *,
-        ticker: str,
-        label: str,
-    ) -> _T:
-        """Retry a fetch coroutine with exponential backoff.
-
-        Catches broad ``Exception`` because yfinance raises inconsistent
-        types, then re-raises as ``DataSourceUnavailableError`` after
-        exhausting retries.
-
-        Args:
-            fetch_fn: Zero-argument callable returning a coroutine.
-            ticker: Ticker symbol for error context.
-            label: Human-readable label for log messages.
-
-        Returns:
-            Whatever *fetch_fn* returns.
-        """
-        last_exc: Exception | None = None
-
-        for attempt in range(MAX_RETRIES):
-            await self._rate_limiter.acquire()
-            try:
-                result = await fetch_fn()
-                return result
-            except (TickerNotFoundError, InsufficientDataError):
-                raise
-            except TimeoutError as exc:
-                last_exc = exc
-                logger.warning(
-                    "%s timed out (attempt %d/%d)",
-                    label,
-                    attempt + 1,
-                    MAX_RETRIES,
-                )
-            except Exception as exc:  # noqa: BLE001
-                last_exc = exc
-                logger.warning(
-                    "%s failed (attempt %d/%d): %s",
-                    label,
-                    attempt + 1,
-                    MAX_RETRIES,
-                    exc,
-                )
-            finally:
-                self._rate_limiter.release()
-
-            if attempt < MAX_RETRIES - 1:
-                delay = (
-                    BACKOFF_DELAYS[attempt]
-                    if attempt < len(BACKOFF_DELAYS)
-                    else BACKOFF_DELAYS[-1]
-                )
-                await asyncio.sleep(delay)
-
-        assert last_exc is not None  # noqa: S101
-        raise DataSourceUnavailableError(
-            f"Failed to fetch {label} after {MAX_RETRIES} retries: {last_exc}",
-            ticker=ticker,
-            source=YFINANCE_SOURCE,
-        )
-
-    # ------------------------------------------------------------------
     # Conversion and filtering
     # ------------------------------------------------------------------
 
@@ -468,8 +354,8 @@ class OptionsDataService:
         has_greeks = all(col in df.columns for col in greeks_cols)
 
         for _, row in df.iterrows():
-            bid = _safe_decimal(row.get("bid"))
-            ask = _safe_decimal(row.get("ask"))
+            bid = safe_decimal(row.get("bid"))
+            ask = safe_decimal(row.get("ask"))
 
             # Flag zero bid/ask as illiquid -- skip
             if bid == Decimal("0") and ask == Decimal("0"):
@@ -479,11 +365,11 @@ class OptionsDataService:
             greeks_source: GreeksSource | None = None
 
             if has_greeks:
-                delta = _safe_float(row.get("delta"))
-                gamma = _safe_float(row.get("gamma"))
-                theta = _safe_float(row.get("theta"))
-                vega = _safe_float(row.get("vega"))
-                rho = _safe_float(row.get("rho"))
+                delta = safe_float(row.get("delta"))
+                gamma = safe_float(row.get("gamma"))
+                theta = safe_float(row.get("theta"))
+                vega = safe_float(row.get("vega"))
+                rho = safe_float(row.get("rho"))
 
                 # Only attach Greeks if delta is in valid range
                 if DELTA_FLOOR <= delta <= DELTA_CEILING and gamma >= GAMMA_FLOOR:
@@ -504,19 +390,19 @@ class OptionsDataService:
                         )
 
             # IV from yfinance is already annualized -- DO NOT scale
-            implied_vol = _safe_float(row.get("impliedVolatility"))
+            implied_vol = safe_float(row.get("impliedVolatility"))
 
             try:
                 contract = OptionContract(
                     ticker=ticker,
                     option_type=option_type,
-                    strike=_safe_decimal(row.get("strike")),
+                    strike=safe_decimal(row.get("strike")),
                     expiration=expiration,
                     bid=bid,
                     ask=ask,
-                    last=_safe_decimal(row.get("lastPrice")),
-                    volume=_safe_int(row.get("volume")),
-                    open_interest=_safe_int(row.get("openInterest")),
+                    last=safe_decimal(row.get("lastPrice")),
+                    volume=safe_int(row.get("volume")),
+                    open_interest=safe_int(row.get("openInterest")),
                     implied_volatility=implied_vol,
                     greeks=greeks,
                     greeks_source=greeks_source,
