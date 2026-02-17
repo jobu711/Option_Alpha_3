@@ -97,6 +97,10 @@ class Database:
 
             logger.info("Applying migration %03d: %s", version, migration_file.name)
             sql = migration_file.read_text(encoding="utf-8")
+            # NOTE: executescript() auto-commits after each statement, so a failure
+            # mid-migration may leave DDL partially applied. However, the version
+            # won't be recorded in schema_version, so the migration retries on next
+            # connect. For production use, keep each migration file atomic.
             await conn.executescript(sql)
             applied_at = datetime.datetime.now(datetime.UTC).isoformat()
             await conn.execute(

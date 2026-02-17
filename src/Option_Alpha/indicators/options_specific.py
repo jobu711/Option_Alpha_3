@@ -90,6 +90,12 @@ def max_pain(
             ticker="unknown",
             source="indicators",
         )
+    if not (len(strikes) == len(call_oi) == len(put_oi)):
+        msg = (
+            f"strikes, call_oi, and put_oi must have equal length, "
+            f"got {len(strikes)}, {len(call_oi)}, {len(put_oi)}"
+        )
+        raise ValueError(msg)
 
     strikes_arr = strikes.to_numpy(dtype=float)
     call_oi_arr = call_oi.to_numpy(dtype=float)

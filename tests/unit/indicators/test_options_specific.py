@@ -255,6 +255,14 @@ class TestMaxPain:
         with pytest.raises(InsufficientDataError):
             max_pain(strikes, call_oi, put_oi)
 
+    def test_mismatched_lengths_raises(self) -> None:
+        """Mismatched input lengths should raise ValueError."""
+        strikes = pd.Series([90.0, 95.0, 100.0])
+        call_oi = pd.Series([100.0, 200.0])  # wrong length
+        put_oi = pd.Series([50.0, 200.0, 100.0])
+        with pytest.raises(ValueError, match="equal length"):
+            max_pain(strikes, call_oi, put_oi)
+
     def test_all_oi_at_one_strike(self) -> None:
         """All OI concentrated at one strike: max pain gravitates there."""
         strikes = pd.Series([90.0, 95.0, 100.0, 105.0, 110.0])
