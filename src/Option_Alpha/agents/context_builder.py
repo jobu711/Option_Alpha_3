@@ -58,6 +58,8 @@ def _format_earnings(
     if next_earnings is None:
         return "N/A"
     dte = (next_earnings - data_timestamp.date()).days
+    if dte < 0:
+        return f"{next_earnings.isoformat()} (passed)"
     return f"{next_earnings.isoformat()} ({dte} DTE)"
 
 
@@ -78,11 +80,13 @@ def build_context_text(context: MarketContext) -> str:
     rsi_label = _interpret_rsi(context.rsi_14)
     earnings_str = _format_earnings(context.next_earnings, context.data_timestamp)
 
-    # Format the data timestamp as a readable UTC string
+    # Format the data timestamp as a readable string
     ts = context.data_timestamp
     if ts.tzinfo is not None:
         ts = ts.astimezone(datetime.UTC)
-    timestamp_str = ts.strftime("%Y-%m-%d %H:%M UTC")
+        timestamp_str = ts.strftime("%Y-%m-%d %H:%M UTC")
+    else:
+        timestamp_str = ts.strftime("%Y-%m-%d %H:%M")
 
     lines: list[str] = [
         f"Ticker: {context.ticker}",

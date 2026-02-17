@@ -35,7 +35,7 @@ class TestBullPrompt:
     def test_bull_messages_count(self) -> None:
         """Bull prompt produces exactly 2 messages."""
         msgs = build_bull_messages(SAMPLE_CONTEXT)
-        assert len(msgs) == 2  # noqa: PLR2004
+        assert len(msgs) == 2
 
     def test_bull_system_role(self) -> None:
         """First message has role='system'."""

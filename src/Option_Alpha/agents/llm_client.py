@@ -178,7 +178,7 @@ class LLMClient:
                 timeout=30.0,
             )
         except ollama.ResponseError as exc:
-            if exc.status_code == 404:  # noqa: PLR2004
+            if exc.status_code == 404:
                 logger.warning("Model not found on Ollama server: %s", self._model)
                 return False
             raise
@@ -209,7 +209,7 @@ class LLMClient:
             try:
                 return await self._do_chat(raw_messages, timeout=timeout)
             except ollama.ResponseError as exc:
-                if exc.status_code == 404:  # noqa: PLR2004
+                if exc.status_code == 404:
                     logger.error("Model not found: %s", self._model)
                     raise
                 last_exception = exc
@@ -242,7 +242,7 @@ class LLMClient:
             )
             raise
         except ollama.ResponseError as exc:
-            if exc.status_code == 404:  # noqa: PLR2004
+            if exc.status_code == 404:
                 raise
             if last_exception is not None:
                 raise exc from last_exception

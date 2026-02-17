@@ -121,6 +121,35 @@ class TestBuildContextText:
         text = build_context_text(ctx)
         assert "$186.50" in text
 
+    def test_earnings_past_shows_passed(self) -> None:
+        """next_earnings in the past -> '(passed)' instead of negative DTE."""
+        ctx = _make_context(
+            next_earnings=datetime.date(2025, 1, 10),
+            data_timestamp=datetime.datetime(2025, 1, 15, 15, 30, 0, tzinfo=datetime.UTC),
+        )
+        text = build_context_text(ctx)
+        assert "(passed)" in text
+        assert "DTE" not in text.split("Next Earnings:")[1].split("\n")[0]
+
+    def test_naive_timestamp_no_utc_label(self) -> None:
+        """Naive data_timestamp omits 'UTC' label."""
+        ctx = _make_context(
+            data_timestamp=datetime.datetime(2025, 1, 15, 15, 30, 0),
+        )
+        text = build_context_text(ctx)
+        data_line = [line for line in text.splitlines() if "Data as of:" in line][0]
+        assert "2025-01-15 15:30" in data_line
+        assert "UTC" not in data_line
+
+    def test_aware_timestamp_has_utc_label(self) -> None:
+        """UTC-aware data_timestamp includes 'UTC' label."""
+        ctx = _make_context(
+            data_timestamp=datetime.datetime(2025, 1, 15, 15, 30, 0, tzinfo=datetime.UTC),
+        )
+        text = build_context_text(ctx)
+        data_line = [line for line in text.splitlines() if "Data as of:" in line][0]
+        assert "UTC" in data_line
+
     def test_no_json_in_output(self, sample_market_context: MarketContext) -> None:
         """Output is flat text -- no JSON braces."""
         text = build_context_text(sample_market_context)

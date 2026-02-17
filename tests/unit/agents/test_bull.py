@@ -70,7 +70,7 @@ class TestBullAgent:
 
         assert isinstance(result, AgentResponse)
         assert result.agent_role == "bull"
-        assert len(result.key_points) == 3  # noqa: PLR2004
+        assert len(result.key_points) == 3
 
     @pytest.mark.asyncio()
     async def test_bull_conviction_range(self, sample_market_context: MarketContext) -> None:
@@ -110,8 +110,8 @@ class TestBullAgent:
         agent = BullAgent(mock_llm)
         result = await agent.run(sample_market_context)
 
-        assert result.input_tokens == 500  # noqa: PLR2004
-        assert result.output_tokens == 200  # noqa: PLR2004
+        assert result.input_tokens == 500
+        assert result.output_tokens == 200
 
     @pytest.mark.asyncio()
     async def test_bull_parse_failure_retries(self, sample_market_context: MarketContext) -> None:
@@ -126,7 +126,7 @@ class TestBullAgent:
         result = await agent.run(sample_market_context)
 
         assert result.agent_role == "bull"
-        assert mock_llm.chat.call_count == 2  # noqa: PLR2004
+        assert mock_llm.chat.call_count == 2
 
     @pytest.mark.asyncio()
     async def test_bull_all_retries_fail(self, sample_market_context: MarketContext) -> None:

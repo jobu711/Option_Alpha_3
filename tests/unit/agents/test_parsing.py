@@ -107,7 +107,7 @@ class TestParseRetry:
         )
 
         assert result.name == "retry"
-        assert mock_llm.chat.call_count == 2  # noqa: PLR2004
+        assert mock_llm.chat.call_count == 2
 
     @pytest.mark.asyncio()
     async def test_parse_retries_on_validation_error(self) -> None:
@@ -139,7 +139,7 @@ class TestParseRetry:
             )
 
         # 1 initial + 2 retries = 3 total
-        assert mock_llm.chat.call_count == 3  # noqa: PLR2004
+        assert mock_llm.chat.call_count == 3
 
     @pytest.mark.asyncio()
     async def test_parse_appends_hint_on_retry(self) -> None:
@@ -158,7 +158,7 @@ class TestParseRetry:
         # Second call should have 4 messages: original + assistant + user hint
         second_call_args = mock_llm.chat.call_args_list[1]
         conversation = second_call_args[0][0]
-        assert len(conversation) == 3  # noqa: PLR2004  # original + assistant + hint
+        assert len(conversation) == 3  # original + assistant + hint
         assert conversation[1].role == "assistant"
         assert conversation[2].role == "user"
         hint_text = conversation[2].content.lower()
@@ -208,8 +208,8 @@ class TestParseEdgeCases:
             mock_llm, messages, _SimpleModel, schema_hint=_SCHEMA_HINT, max_retries=1
         )
 
-        assert llm_resp.input_tokens == 200  # noqa: PLR2004
-        assert llm_resp.output_tokens == 100  # noqa: PLR2004
+        assert llm_resp.input_tokens == 200
+        assert llm_resp.output_tokens == 100
 
     @pytest.mark.asyncio()
     async def test_parse_validation_error_type(self) -> None:

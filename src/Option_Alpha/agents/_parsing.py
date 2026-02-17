@@ -179,5 +179,5 @@ async def parse_with_retry[T: pydantic.BaseModel](
                 )
 
     # All retries exhausted — re-raise the last error
-    assert last_error is not None  # noqa: S101
+    assert last_error is not None
     raise last_error

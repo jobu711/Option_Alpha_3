@@ -130,7 +130,7 @@ class TestLLMClientChat:
         call_kwargs = mock_instance.chat.call_args
         options = call_kwargs.kwargs.get("options") or call_kwargs[1].get("options")
         assert options is not None
-        assert options["num_ctx"] == 8192  # noqa: PLR2004
+        assert options["num_ctx"] == 8192
 
     @pytest.mark.asyncio()
     @patch("Option_Alpha.agents.llm_client.ollama.Client")
@@ -148,9 +148,9 @@ class TestLLMClientChat:
         client = LLMClient(host="http://localhost:11434")
         response = await client.chat([ChatMessage(role="user", content="test")])
 
-        assert response.input_tokens == 750  # noqa: PLR2004
-        assert response.output_tokens == 300  # noqa: PLR2004
-        assert response.duration_ms == 5500  # noqa: PLR2004
+        assert response.input_tokens == 750
+        assert response.output_tokens == 300
+        assert response.duration_ms == 5500
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ class TestLLMClientRetry:
         response = await client.chat([ChatMessage(role="user", content="test")])
 
         assert response.content == '{"ok": true}'
-        assert mock_instance.chat.call_count == 3  # noqa: PLR2004
+        assert mock_instance.chat.call_count == 3
 
     @pytest.mark.asyncio()
     @patch("Option_Alpha.agents.llm_client.asyncio.sleep", return_value=None)
