@@ -15,7 +15,7 @@ from decimal import Decimal
 import pytest
 from pydantic import ValidationError
 
-from Option_Alpha.models.analysis import AgentResponse, MarketContext, TradeThesis
+from Option_Alpha.models.analysis import AgentResponse, GreeksCited, MarketContext, TradeThesis
 from Option_Alpha.models.enums import SignalDirection
 
 
@@ -140,7 +140,7 @@ class TestAgentResponse:
                 key_points=["Point 1"],
                 conviction=1.01,
                 contracts_referenced=["AAPL 185C"],
-                greeks_cited={"delta": 0.45},
+                greeks_cited=GreeksCited(delta=0.45),
                 model_used="test-model",
                 input_tokens=100,
                 output_tokens=50,
@@ -155,7 +155,7 @@ class TestAgentResponse:
                 key_points=["Point 1"],
                 conviction=-0.01,
                 contracts_referenced=["AAPL 180P"],
-                greeks_cited={"delta": -0.30},
+                greeks_cited=GreeksCited(delta=-0.30),
                 model_used="test-model",
                 input_tokens=100,
                 output_tokens=50,
@@ -169,7 +169,7 @@ class TestAgentResponse:
             key_points=[],
             conviction=0.0,
             contracts_referenced=[],
-            greeks_cited={},
+            greeks_cited=GreeksCited(),
             model_used="test-model",
             input_tokens=100,
             output_tokens=50,
@@ -182,7 +182,7 @@ class TestAgentResponse:
             key_points=["Overwhelming evidence"],
             conviction=1.0,
             contracts_referenced=["SPY 450P"],
-            greeks_cited={"delta": -0.90},
+            greeks_cited=GreeksCited(delta=-0.90),
             model_used="test-model",
             input_tokens=100,
             output_tokens=50,
@@ -194,26 +194,26 @@ class TestAgentResponse:
         with pytest.raises(ValidationError, match="frozen"):
             sample_agent_response.agent_role = "bear"  # type: ignore[misc]
 
-    def test_greeks_cited_dict(self, sample_agent_response: AgentResponse) -> None:
-        """greeks_cited maps Greek names to float values."""
-        assert "delta" in sample_agent_response.greeks_cited
-        assert sample_agent_response.greeks_cited["delta"] == pytest.approx(0.45, rel=1e-4)
+    def test_greeks_cited_typed(self, sample_agent_response: AgentResponse) -> None:
+        """greeks_cited is a GreeksCited model with typed fields."""
+        assert isinstance(sample_agent_response.greeks_cited, GreeksCited)
+        assert sample_agent_response.greeks_cited.delta == pytest.approx(0.45, rel=1e-4)
 
     def test_empty_contracts_and_greeks(self) -> None:
-        """Empty contracts_referenced and greeks_cited lists are valid."""
+        """Empty contracts_referenced and default GreeksCited are valid."""
         response = AgentResponse(
             agent_role="bull",
             analysis="General outlook only",
             key_points=["Macro trend positive"],
             conviction=0.50,
             contracts_referenced=[],
-            greeks_cited={},
+            greeks_cited=GreeksCited(),
             model_used="test-model",
             input_tokens=100,
             output_tokens=50,
         )
         assert response.contracts_referenced == []
-        assert response.greeks_cited == {}
+        assert response.greeks_cited == GreeksCited()
 
 
 class TestTradeThesis:

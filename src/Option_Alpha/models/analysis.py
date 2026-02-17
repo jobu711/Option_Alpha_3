@@ -49,6 +49,22 @@ class MarketContext(BaseModel):
         return str(value)
 
 
+class GreeksCited(BaseModel):
+    """Greeks values cited by a debate agent in their argument.
+
+    Used instead of dict[str, float] so that agent responses carry
+    typed, validated Greek citations rather than arbitrary key-value pairs.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    delta: float | None = None
+    gamma: float | None = None
+    theta: float | None = None
+    vega: float | None = None
+    rho: float | None = None
+
+
 def _validate_conviction(value: float) -> float:
     """Conviction must be between 0.0 and 1.0."""
     if not CONVICTION_MIN <= value <= CONVICTION_MAX:
@@ -71,7 +87,7 @@ class AgentResponse(BaseModel):
     key_points: list[str]
     conviction: float
     contracts_referenced: list[str]
-    greeks_cited: dict[str, float]
+    greeks_cited: GreeksCited
     model_used: str
     input_tokens: int
     output_tokens: int
