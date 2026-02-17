@@ -358,7 +358,13 @@ class OptionsDataService:
             ask = safe_decimal(row.get("ask"))
 
             # Flag zero bid/ask as illiquid -- skip
-            if bid == Decimal("0") and ask == Decimal("0"):
+            # Zero bid means no market maker willing to buy
+            if bid == Decimal("0"):
+                logger.debug(
+                    "Skipping illiquid contract %s strike %s: zero bid",
+                    ticker,
+                    row.get("strike"),
+                )
                 continue
 
             greeks: OptionGreeks | None = None

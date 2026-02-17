@@ -12,7 +12,7 @@ Covers:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
@@ -62,6 +62,21 @@ def _mock_fred_response(
     return response
 
 
+def _patch_client(
+    service: FredService,
+    response: MagicMock | None = None,
+    *,
+    side_effect: Exception | None = None,
+) -> None:
+    """Replace the service's shared httpx client with a mock."""
+    mock_client = AsyncMock()
+    if side_effect is not None:
+        mock_client.get = AsyncMock(side_effect=side_effect)
+    else:
+        mock_client.get = AsyncMock(return_value=response)
+    service._client = mock_client
+
+
 # ---------------------------------------------------------------------------
 # get_risk_free_rate tests
 # ---------------------------------------------------------------------------
@@ -73,33 +88,15 @@ class TestGetRiskFreeRate:
     @pytest.mark.asyncio()
     async def test_returns_correct_decimal_from_fred(self, fred_service: FredService) -> None:
         """Converts FRED's percentage value (4.25) to decimal (0.0425)."""
-        mock_response = _mock_fred_response(value="4.25")
-
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client_cls.return_value = mock_client
-
-            rate = await fred_service.get_risk_free_rate()
-
+        _patch_client(fred_service, _mock_fred_response(value="4.25"))
+        rate = await fred_service.get_risk_free_rate()
         assert rate == pytest.approx(0.0425, rel=1e-4)
 
     @pytest.mark.asyncio()
     async def test_fallback_when_fred_unavailable(self, fred_service: FredService) -> None:
         """Returns fallback rate (5%) when FRED returns an error."""
-        mock_response = _mock_fred_response(status_code=500)
-
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client_cls.return_value = mock_client
-
-            rate = await fred_service.get_risk_free_rate()
-
+        _patch_client(fred_service, _mock_fred_response(status_code=500))
+        rate = await fred_service.get_risk_free_rate()
         assert rate == pytest.approx(RISK_FREE_RATE_FALLBACK, rel=1e-4)
 
     @pytest.mark.asyncio()
@@ -128,16 +125,8 @@ class TestGetRiskFreeRate:
         cache: ServiceCache,
     ) -> None:
         """Fetched rate is cached for subsequent calls."""
-        mock_response = _mock_fred_response(value="3.80")
-
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=mock_response)
-            mock_client_cls.return_value = mock_client
-
-            await fred_service.get_risk_free_rate()
+        _patch_client(fred_service, _mock_fred_response(value="3.80"))
+        await fred_service.get_risk_free_rate()
 
         # Verify it was cached
         cached = await cache.get(FRED_CACHE_KEY)
@@ -161,15 +150,8 @@ class TestFREDMissingData:
             ],
         }
 
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=response)
-            mock_client_cls.return_value = mock_client
-
-            rate = await fred_service.get_risk_free_rate()
-
+        _patch_client(fred_service, response)
+        rate = await fred_service.get_risk_free_rate()
         assert rate == pytest.approx(0.041, rel=1e-4)
 
     @pytest.mark.asyncio()
@@ -184,15 +166,8 @@ class TestFREDMissingData:
             ],
         }
 
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=response)
-            mock_client_cls.return_value = mock_client
-
-            rate = await fred_service.get_risk_free_rate()
-
+        _patch_client(fred_service, response)
+        rate = await fred_service.get_risk_free_rate()
         # Should fall back because _fetch_from_fred raises DataSourceUnavailableError
         assert rate == pytest.approx(RISK_FREE_RATE_FALLBACK, rel=1e-4)
 
@@ -208,15 +183,8 @@ class TestFREDMissingData:
             ],
         }
 
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=response)
-            mock_client_cls.return_value = mock_client
-
-            rate = await fred_service.get_risk_free_rate()
-
+        _patch_client(fred_service, response)
+        rate = await fred_service.get_risk_free_rate()
         assert rate == pytest.approx(0.039, rel=1e-4)
 
 
@@ -226,29 +194,15 @@ class TestFREDNetworkErrors:
     @pytest.mark.asyncio()
     async def test_httpx_error_falls_back(self, fred_service: FredService) -> None:
         """httpx.HTTPError falls back to default rate."""
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("connection refused"))
-            mock_client_cls.return_value = mock_client
-
-            rate = await fred_service.get_risk_free_rate()
-
+        _patch_client(fred_service, side_effect=httpx.ConnectError("connection refused"))
+        rate = await fred_service.get_risk_free_rate()
         assert rate == pytest.approx(RISK_FREE_RATE_FALLBACK, rel=1e-4)
 
     @pytest.mark.asyncio()
     async def test_timeout_falls_back(self, fred_service: FredService) -> None:
         """Timeout falls back to default rate."""
-        with patch("Option_Alpha.services.fred.httpx.AsyncClient") as mock_client_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(side_effect=TimeoutError("timed out"))
-            mock_client_cls.return_value = mock_client
-
-            rate = await fred_service.get_risk_free_rate()
-
+        _patch_client(fred_service, side_effect=TimeoutError("timed out"))
+        rate = await fred_service.get_risk_free_rate()
         assert rate == pytest.approx(RISK_FREE_RATE_FALLBACK, rel=1e-4)
 
 

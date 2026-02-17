@@ -190,6 +190,7 @@ def sample_health_status() -> HealthStatus:
     """A valid HealthStatus snapshot."""
     return HealthStatus(
         ollama_available=True,
+        anthropic_available=True,
         yfinance_available=True,
         sqlite_available=True,
         ollama_models=["llama3:70b", "mistral:7b"],

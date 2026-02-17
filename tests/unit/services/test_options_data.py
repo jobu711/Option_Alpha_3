@@ -451,6 +451,27 @@ class TestZeroBidAskFiltering:
         )
         assert len(contracts) == 0
 
+    def test_zero_bid_with_nonzero_ask_skipped(self) -> None:
+        """Contract with bid=0 but ask>0 is flagged as illiquid and skipped."""
+        df = pd.DataFrame(
+            {
+                "strike": [185.0],
+                "bid": [0.0],
+                "ask": [1.50],
+                "lastPrice": [0.50],
+                "volume": [10],
+                "openInterest": [100],
+                "impliedVolatility": [0.30],
+            }
+        )
+        contracts = OptionsDataService._dataframe_to_contracts(
+            df,
+            ticker="AAPL",
+            option_type=OptionType.CALL,
+            expiration=datetime.date(2025, 2, 21),
+        )
+        assert len(contracts) == 0
+
     def test_nonzero_bid_with_zero_ask_kept(self) -> None:
         """Contract with bid > 0 but ask = 0 is kept (unusual but possible)."""
         df = pd.DataFrame(

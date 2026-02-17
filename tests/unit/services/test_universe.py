@@ -20,7 +20,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from Option_Alpha.models.market_data import TickerInfo
+from Option_Alpha.models.market_data import TickerInfo, UniverseStats
 from Option_Alpha.services.cache import ServiceCache
 from Option_Alpha.services.rate_limiter import RateLimiter
 from Option_Alpha.services.universe import (
@@ -437,9 +437,10 @@ class TestGetStats:
             tickers = await service.refresh()
 
         stats = await service.get_stats()
-        assert stats["total"] == len(tickers)
-        assert stats["active"] == sum(1 for t in tickers if t.status == "active")
-        assert stats["inactive"] == stats["total"] - stats["active"]
+        assert isinstance(stats, UniverseStats)
+        assert stats.total == len(tickers)
+        assert stats.active == sum(1 for t in tickers if t.status == "active")
+        assert stats.inactive == stats.total - stats.active
 
     @pytest.mark.asyncio()
     async def test_includes_tier_and_sector_counts(self, service: UniverseService) -> None:
@@ -455,12 +456,9 @@ class TestGetStats:
             await service.refresh()
 
         stats = await service.get_stats()
-        # Should have tier_ prefixed keys
-        tier_keys = [k for k in stats if k.startswith("tier_")]
-        assert len(tier_keys) > 0
-        # Should have sector_ prefixed keys
-        sector_keys = [k for k in stats if k.startswith("sector_")]
-        assert len(sector_keys) > 0
+        assert isinstance(stats, UniverseStats)
+        assert len(stats.by_tier) > 0
+        assert len(stats.by_sector) > 0
 
 
 # ---------------------------------------------------------------------------

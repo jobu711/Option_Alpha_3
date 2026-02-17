@@ -61,11 +61,19 @@ class FredService:
     ) -> None:
         self._cache = cache
         self._api_key = api_key
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
 
         logger.info(
             "FredService initialized: api_key=%s",
             "configured" if api_key else "not configured",
         )
+
+    async def aclose(self) -> None:
+        """Close the shared httpx client."""
+        await self._client.aclose()
 
     async def get_risk_free_rate(self) -> float:
         """Return the current risk-free rate as a decimal (e.g. 0.045 for 4.5%).
@@ -124,31 +132,19 @@ class FredService:
             "limit": str(FRED_OBSERVATION_LIMIT),
         }
 
-        async with httpx.AsyncClient(
-            timeout=httpx.Timeout(
-                connect=5.0,
-                read=30.0,
-                write=10.0,
-                pool=5.0,
-            ),
-            limits=httpx.Limits(
-                max_connections=10,
-                max_keepalive_connections=5,
-            ),
-        ) as client:
-            try:
-                response = await asyncio.wait_for(
-                    client.get(FRED_API_BASE_URL, params=params),
-                    timeout=FRED_FETCH_TIMEOUT,
-                )
-            except TimeoutError as exc:
-                msg = "FRED API request timed out."
-                logger.error(msg)
-                raise DataSourceUnavailableError(
-                    msg,
-                    ticker="DGS10",
-                    source="fred",
-                ) from exc
+        try:
+            response = await asyncio.wait_for(
+                self._client.get(FRED_API_BASE_URL, params=params),
+                timeout=FRED_FETCH_TIMEOUT,
+            )
+        except TimeoutError as exc:
+            msg = "FRED API request timed out."
+            logger.error(msg)
+            raise DataSourceUnavailableError(
+                msg,
+                ticker="DGS10",
+                source="fred",
+            ) from exc
 
         if response.status_code != 200:  # noqa: PLR2004
             msg = f"FRED returned HTTP {response.status_code}."

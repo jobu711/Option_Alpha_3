@@ -14,6 +14,7 @@ class HealthStatus(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     ollama_available: bool
+    anthropic_available: bool
     yfinance_available: bool
     sqlite_available: bool
     ollama_models: list[str]

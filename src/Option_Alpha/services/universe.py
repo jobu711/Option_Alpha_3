@@ -18,7 +18,7 @@ from typing import Final
 
 import httpx
 
-from Option_Alpha.models.market_data import TickerInfo
+from Option_Alpha.models.market_data import TickerInfo, UniverseStats
 from Option_Alpha.services.cache import ServiceCache
 from Option_Alpha.services.rate_limiter import RateLimiter
 from Option_Alpha.utils.exceptions import DataSourceUnavailableError
@@ -98,8 +98,16 @@ class UniverseService:
         self._rate_limiter = rate_limiter
         self._universe: list[TickerInfo] = []
         self._miss_counts: dict[str, int] = {}
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
 
         logger.info("UniverseService initialized.")
+
+    async def aclose(self) -> None:
+        """Close the shared httpx client."""
+        await self._client.aclose()
 
     async def refresh(self) -> list[TickerInfo]:
         """Download and parse the CBOE optionable list.
@@ -225,11 +233,11 @@ class UniverseService:
 
         return [t for t in tickers if t.sector == sector]
 
-    async def get_stats(self) -> dict[str, int]:
+    async def get_stats(self) -> UniverseStats:
         """Return summary statistics about the current universe.
 
         Returns:
-            Dict with counts by status, preset tier, and sector.
+            Typed ``UniverseStats`` model with counts by status, tier, and sector.
         """
         if not self._universe:
             await self._load_from_cache()
@@ -249,19 +257,13 @@ class UniverseService:
             if sector:
                 by_sector[sector] = by_sector.get(sector, 0) + 1
 
-        stats: dict[str, int] = {
-            "total": total,
-            "active": active,
-            "inactive": inactive,
-        }
-        # Add tier counts with prefix
-        for tier, count in by_tier.items():
-            stats[f"tier_{tier}"] = count
-        # Add sector counts with prefix
-        for sector, count in by_sector.items():
-            stats[f"sector_{sector}"] = count
-
-        return stats
+        return UniverseStats(
+            total=total,
+            active=active,
+            inactive=inactive,
+            by_tier=by_tier,
+            by_sector=by_sector,
+        )
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -279,22 +281,10 @@ class UniverseService:
         """
         await self._rate_limiter.acquire()
         try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(
-                    connect=5.0,
-                    read=30.0,
-                    write=10.0,
-                    pool=5.0,
-                ),
-                limits=httpx.Limits(
-                    max_connections=10,
-                    max_keepalive_connections=5,
-                ),
-            ) as client:
-                response = await asyncio.wait_for(
-                    client.get(CBOE_OPTIONABLE_URL),
-                    timeout=CBOE_FETCH_TIMEOUT,
-                )
+            response = await asyncio.wait_for(
+                self._client.get(CBOE_OPTIONABLE_URL),
+                timeout=CBOE_FETCH_TIMEOUT,
+            )
 
             if response.status_code != 200:  # noqa: PLR2004
                 msg = f"CBOE returned HTTP {response.status_code} fetching optionable list."

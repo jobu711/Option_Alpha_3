@@ -58,6 +58,18 @@ OHLCV_COLUMN_MAP: Final[dict[str, str]] = {
     "Volume": "volume",
 }
 
+# Expected calendar days for each yfinance period string
+PERIOD_EXPECTED_DAYS: Final[dict[str, int]] = {
+    "1y": 365,
+    "6mo": 183,
+    "3mo": 91,
+    "1mo": 30,
+    "5d": 5,
+}
+
+# Date range must cover at least this fraction of the expected period
+MIN_DATE_RANGE_RATIO: Final[float] = 0.6
+
 
 class MarketDataService:
     """Async market data service backed by yfinance.
@@ -130,6 +142,9 @@ class MarketDataService:
         # Validate
         self._validate_ohlcv_dataframe(raw_df, ticker, period)
 
+        # Normalize column names to known schema (yfinance wrapping rule 3)
+        raw_df = raw_df.rename(columns=OHLCV_COLUMN_MAP)
+
         # Convert to models
         bars = self._dataframe_to_ohlcv(raw_df, ticker)
 
@@ -141,6 +156,10 @@ class MarketDataService:
 
     async def fetch_quote(self, ticker: str) -> Quote:
         """Fetch a real-time / delayed quote snapshot for *ticker*.
+
+        Outside market hours, quotes represent the previous close and are
+        served from cache when available. A warning is logged to indicate
+        the data may be stale.
 
         Args:
             ticker: Ticker symbol.
@@ -154,6 +173,13 @@ class MarketDataService:
         """
         ticker = ticker.upper().strip()
         cache_key = f"yf:{DATA_TYPE_QUOTE}:{ticker}"
+
+        # After hours: prefer cached data and warn about staleness
+        if not self._cache.is_market_hours():
+            logger.debug(
+                "Market is closed — quote for %s may be previous close.",
+                ticker,
+            )
 
         cached = await self._cache.get(cache_key)
         if cached is not None:
@@ -363,6 +389,23 @@ class MarketDataService:
                 source=YFINANCE_SOURCE,
             )
 
+        # Verify date range coverage — yfinance silently returns less data
+        expected_days = PERIOD_EXPECTED_DAYS.get(period)
+        if expected_days is not None and len(df) > 1:
+            first_date = df.index[0]
+            last_date = df.index[-1]
+            actual_span = (last_date - first_date).days
+            if actual_span < expected_days * MIN_DATE_RANGE_RATIO:
+                logger.warning(
+                    "Date range for %s covers only %d days "
+                    "(expected ~%d for period '%s'). "
+                    "yfinance may have returned less data than requested.",
+                    ticker,
+                    actual_span,
+                    expected_days,
+                    period,
+                )
+
     @staticmethod
     def _validate_info_dict(info: dict[str, object], ticker: str) -> None:
         """Validate that the info dict represents a real ticker."""
@@ -402,11 +445,11 @@ class MarketDataService:
             try:
                 bar = OHLCV(
                     date=bar_date,
-                    open=safe_decimal(row["Open"]),
-                    high=safe_decimal(row["High"]),
-                    low=safe_decimal(row["Low"]),
-                    close=safe_decimal(row["Close"]),
-                    volume=safe_int(row["Volume"]),
+                    open=safe_decimal(row["open"]),
+                    high=safe_decimal(row["high"]),
+                    low=safe_decimal(row["low"]),
+                    close=safe_decimal(row["close"]),
+                    volume=safe_int(row["volume"]),
                 )
                 bars.append(bar)
             except Exception:  # noqa: BLE001

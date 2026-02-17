@@ -1,8 +1,9 @@
 """Health checks for all external service dependencies.
 
-Checks Ollama (local LLM), yfinance (market data), and SQLite (persistence)
-availability. Each check runs independently with its own timeout so a single
-service being down does not block the entire health report.
+Checks Ollama (local LLM), Anthropic (cloud LLM), yfinance (market data),
+and SQLite (persistence) availability. Each check runs independently with its
+own timeout so a single service being down does not block the entire health
+report.
 """
 
 from __future__ import annotations
@@ -10,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import os
 from typing import Final
 
 import httpx
@@ -26,6 +28,10 @@ logger = logging.getLogger(__name__)
 OLLAMA_BASE_URL: Final[str] = "http://localhost:11434"
 OLLAMA_TAGS_ENDPOINT: Final[str] = f"{OLLAMA_BASE_URL}/api/tags"
 REQUIRED_OLLAMA_MODEL: Final[str] = "llama3.1:8b"
+
+# Anthropic API health check
+ANTHROPIC_API_URL: Final[str] = "https://api.anthropic.com/v1/messages"
+ANTHROPIC_CHECK_TIMEOUT: Final[float] = 5.0
 
 # Canary ticker for yfinance health check
 YFINANCE_CANARY_TICKER: Final[str] = "SPY"
@@ -53,8 +59,16 @@ class HealthService:
 
     def __init__(self, database: Database | None = None) -> None:
         self._database = database
+        self._client = httpx.AsyncClient(
+            timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
+            limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
+        )
 
         logger.info("HealthService initialized.")
+
+    async def aclose(self) -> None:
+        """Close the shared httpx client."""
+        await self._client.aclose()
 
     async def check_all(self) -> HealthStatus:
         """Run all health checks and return a consolidated status.
@@ -66,11 +80,13 @@ class HealthService:
             HealthStatus with per-service availability flags.
         """
         ollama_result: tuple[bool, list[str]]
+        anthropic_result: bool
         yfinance_result: bool
         sqlite_result: bool
 
         results = await asyncio.gather(
             self._check_ollama_with_models(),
+            self.check_anthropic(),
             self.check_yfinance(),
             self.check_database(),
             return_exceptions=True,
@@ -83,22 +99,30 @@ class HealthService:
         else:
             ollama_result = results[0]
 
-        # Process yfinance result
+        # Process Anthropic result
         if isinstance(results[1], BaseException):
-            logger.warning("yfinance health check raised: %s", results[1])
+            logger.warning("Anthropic health check raised: %s", results[1])
+            anthropic_result = False
+        else:
+            anthropic_result = results[1]
+
+        # Process yfinance result
+        if isinstance(results[2], BaseException):
+            logger.warning("yfinance health check raised: %s", results[2])
             yfinance_result = False
         else:
-            yfinance_result = results[1]
+            yfinance_result = results[2]
 
         # Process SQLite result
-        if isinstance(results[2], BaseException):
-            logger.warning("SQLite health check raised: %s", results[2])
+        if isinstance(results[3], BaseException):
+            logger.warning("SQLite health check raised: %s", results[3])
             sqlite_result = False
         else:
-            sqlite_result = results[2]
+            sqlite_result = results[3]
 
         status = HealthStatus(
             ollama_available=ollama_result[0],
+            anthropic_available=anthropic_result,
             yfinance_available=yfinance_result,
             sqlite_available=sqlite_result,
             ollama_models=ollama_result[1],
@@ -106,8 +130,9 @@ class HealthService:
         )
 
         logger.info(
-            "Health check complete: ollama=%s yfinance=%s sqlite=%s models=%s",
+            "Health check complete: ollama=%s anthropic=%s yfinance=%s sqlite=%s models=%s",
             status.ollama_available,
+            status.anthropic_available,
             status.yfinance_available,
             status.sqlite_available,
             status.ollama_models,
@@ -123,6 +148,51 @@ class HealthService:
         """
         result = await self._check_ollama_with_models()
         return result[0]
+
+    async def check_anthropic(self) -> bool:
+        """Check if the Anthropic API is reachable with a valid API key.
+
+        Sends a minimal request to the messages endpoint. A 401
+        (invalid key) still means the API is reachable; only network
+        errors or timeouts count as unavailable.
+
+        Returns:
+            True if the Anthropic API responds (any HTTP status).
+        """
+        api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+        if not api_key:
+            logger.warning("ANTHROPIC_API_KEY not set — skipping check.")
+            return False
+
+        try:
+            response = await asyncio.wait_for(
+                self._client.post(
+                    ANTHROPIC_API_URL,
+                    headers={
+                        "x-api-key": api_key,
+                        "anthropic-version": "2023-06-01",
+                        "content-type": "application/json",
+                    },
+                    json={
+                        "model": "claude-sonnet-4-5-20250929",
+                        "max_tokens": 1,
+                        "messages": [{"role": "user", "content": "ping"}],
+                    },
+                ),
+                timeout=ANTHROPIC_CHECK_TIMEOUT,
+            )
+            # Any HTTP response means the API is reachable
+            logger.debug(
+                "Anthropic health check: HTTP %d",
+                response.status_code,
+            )
+            return True
+        except TimeoutError:
+            logger.warning("Anthropic health check timed out.")
+            return False
+        except httpx.HTTPError as exc:
+            logger.warning("Anthropic health check failed: %s", exc)
+            return False
 
     async def check_yfinance(self) -> bool:
         """Check if yfinance can fetch data by querying the SPY canary ticker.
@@ -186,18 +256,10 @@ class HealthService:
             Tuple of (True if llama3.1:8b is available, list of model names).
         """
         try:
-            async with httpx.AsyncClient(
-                timeout=httpx.Timeout(
-                    connect=5.0,
-                    read=5.0,
-                    write=5.0,
-                    pool=5.0,
-                ),
-            ) as client:
-                response = await asyncio.wait_for(
-                    client.get(OLLAMA_TAGS_ENDPOINT),
-                    timeout=OLLAMA_CHECK_TIMEOUT,
-                )
+            response = await asyncio.wait_for(
+                self._client.get(OLLAMA_TAGS_ENDPOINT),
+                timeout=OLLAMA_CHECK_TIMEOUT,
+            )
 
             if response.status_code != 200:  # noqa: PLR2004
                 logger.warning(

@@ -64,6 +64,21 @@ class Quote(BaseModel):
         return self.ask - self.bid
 
 
+class UniverseStats(BaseModel):
+    """Summary statistics about the ticker universe.
+
+    Returned by ``UniverseService.get_stats()`` instead of a raw dict.
+    """
+
+    model_config = ConfigDict(frozen=True)
+
+    total: int
+    active: int
+    inactive: int
+    by_tier: dict[str, int]
+    by_sector: dict[str, int]
+
+
 class TickerInfo(BaseModel):
     """Metadata about a tracked ticker symbol.
 

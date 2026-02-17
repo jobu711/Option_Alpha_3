@@ -1,4 +1,4 @@
-"""Tests for HealthService: Ollama, yfinance, and SQLite health checks.
+"""Tests for HealthService: Ollama, Anthropic, yfinance, and SQLite checks.
 
 All external calls are mocked. No real API calls.
 
@@ -8,6 +8,8 @@ Covers:
 - check_ollama() succeeds when model exists
 - check_ollama() fails when model missing
 - check_ollama() fails when Ollama is unreachable
+- check_anthropic() succeeds when API reachable
+- check_anthropic() fails when key missing or API unreachable
 - check_yfinance() succeeds with valid SPY data
 - check_yfinance() fails when yfinance errors
 - check_database() succeeds with valid connection
@@ -48,6 +50,21 @@ def _mock_ollama_response(
     return response
 
 
+def _patch_client(
+    service: HealthService,
+    response: MagicMock | None = None,
+    *,
+    side_effect: Exception | None = None,
+) -> None:
+    """Replace the service's shared httpx client with a mock."""
+    mock_client = AsyncMock()
+    if side_effect is not None:
+        mock_client.get = AsyncMock(side_effect=side_effect)
+    else:
+        mock_client.get = AsyncMock(return_value=response)
+    service._client = mock_client
+
+
 # ---------------------------------------------------------------------------
 # check_all tests
 # ---------------------------------------------------------------------------
@@ -60,31 +77,17 @@ class TestCheckAll:
     async def test_all_healthy(self) -> None:
         """check_all() returns all True when everything is healthy."""
         service = HealthService(database=None)
-
-        # Mock Ollama
-        ollama_response = _mock_ollama_response()
-
-        # Mock yfinance canary
-        mock_yf_result = True
+        _patch_client(service, _mock_ollama_response())
 
         with (
-            patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_httpx_cls,
-            patch.object(
-                service,
-                "_yfinance_canary",
-                return_value=mock_yf_result,
-            ),
+            patch.object(service, "_yfinance_canary", return_value=True),
+            patch.object(service, "check_anthropic", return_value=True),
         ):
-            mock_httpx_client = AsyncMock()
-            mock_httpx_client.__aenter__ = AsyncMock(return_value=mock_httpx_client)
-            mock_httpx_client.__aexit__ = AsyncMock(return_value=False)
-            mock_httpx_client.get = AsyncMock(return_value=ollama_response)
-            mock_httpx_cls.return_value = mock_httpx_client
-
             status = await service.check_all()
 
         assert isinstance(status, HealthStatus)
         assert status.ollama_available is True
+        assert status.anthropic_available is True
         assert status.yfinance_available is True
         # sqlite_available is False because no database was configured
         assert status.sqlite_available is False
@@ -93,25 +96,16 @@ class TestCheckAll:
     async def test_one_service_down_others_still_checked(self) -> None:
         """When Ollama is down, yfinance and SQLite are still checked."""
         service = HealthService(database=None)
+        _patch_client(service, side_effect=httpx.ConnectError("refused"))
 
         with (
-            patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_httpx_cls,
-            patch.object(
-                service,
-                "_yfinance_canary",
-                return_value=True,
-            ),
+            patch.object(service, "_yfinance_canary", return_value=True),
+            patch.object(service, "check_anthropic", return_value=True),
         ):
-            mock_httpx_client = AsyncMock()
-            mock_httpx_client.__aenter__ = AsyncMock(return_value=mock_httpx_client)
-            mock_httpx_client.__aexit__ = AsyncMock(return_value=False)
-            # Ollama is unreachable
-            mock_httpx_client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
-            mock_httpx_cls.return_value = mock_httpx_client
-
             status = await service.check_all()
 
         assert status.ollama_available is False
+        assert status.anthropic_available is True
         assert status.yfinance_available is True
 
 
@@ -128,49 +122,24 @@ class TestCheckOllama:
         """check_ollama() returns True when llama3.1:8b is available."""
         service = HealthService()
         response = _mock_ollama_response(models=[REQUIRED_OLLAMA_MODEL, "other:model"])
-
-        with patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=response)
-            mock_cls.return_value = mock_client
-
-            result = await service.check_ollama()
-
+        _patch_client(service, response)
+        result = await service.check_ollama()
         assert result is True
 
     @pytest.mark.asyncio()
     async def test_fails_when_model_missing(self) -> None:
         """check_ollama() returns False when required model is not found."""
         service = HealthService()
-        response = _mock_ollama_response(models=["other:model", "phi:latest"])
-
-        with patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=response)
-            mock_cls.return_value = mock_client
-
-            result = await service.check_ollama()
-
+        _patch_client(service, _mock_ollama_response(models=["other:model", "phi:latest"]))
+        result = await service.check_ollama()
         assert result is False
 
     @pytest.mark.asyncio()
     async def test_fails_when_ollama_unreachable(self) -> None:
         """check_ollama() returns False when Ollama is not running."""
         service = HealthService()
-
-        with patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("Connection refused"))
-            mock_cls.return_value = mock_client
-
-            result = await service.check_ollama()
-
+        _patch_client(service, side_effect=httpx.ConnectError("Connection refused"))
+        result = await service.check_ollama()
         assert result is False
 
     @pytest.mark.asyncio()
@@ -178,16 +147,9 @@ class TestCheckOllama:
         """_check_ollama_with_models() returns list of available models."""
         service = HealthService()
         model_names = [REQUIRED_OLLAMA_MODEL, "codellama:7b"]
-        response = _mock_ollama_response(models=model_names)
+        _patch_client(service, _mock_ollama_response(models=model_names))
 
-        with patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=response)
-            mock_cls.return_value = mock_client
-
-            available, models = await service._check_ollama_with_models()
+        available, models = await service._check_ollama_with_models()
 
         assert available is True
         assert REQUIRED_OLLAMA_MODEL in models
@@ -197,16 +159,84 @@ class TestCheckOllama:
     async def test_non_200_returns_false(self) -> None:
         """Non-200 HTTP response means Ollama is not healthy."""
         service = HealthService()
-        response = _mock_ollama_response(status_code=500)
+        _patch_client(service, _mock_ollama_response(status_code=500))
+        result = await service.check_ollama()
+        assert result is False
 
-        with patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_cls:
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(return_value=response)
-            mock_cls.return_value = mock_client
 
-            result = await service.check_ollama()
+# ---------------------------------------------------------------------------
+# check_anthropic tests
+# ---------------------------------------------------------------------------
+
+
+class TestCheckAnthropic:
+    """Tests for check_anthropic()."""
+
+    @pytest.mark.asyncio()
+    async def test_succeeds_when_api_reachable(self) -> None:
+        """check_anthropic() returns True when API responds (any status)."""
+        service = HealthService()
+        mock_response = MagicMock()
+        mock_response.status_code = 200
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        service._client = mock_client
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-key"}):
+            result = await service.check_anthropic()
+
+        assert result is True
+
+    @pytest.mark.asyncio()
+    async def test_succeeds_even_with_401(self) -> None:
+        """check_anthropic() returns True on 401 — API is reachable."""
+        service = HealthService()
+        mock_response = MagicMock()
+        mock_response.status_code = 401
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(return_value=mock_response)
+        service._client = mock_client
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-bad-key"}):
+            result = await service.check_anthropic()
+
+        assert result is True
+
+    @pytest.mark.asyncio()
+    async def test_fails_when_no_api_key(self) -> None:
+        """check_anthropic() returns False when ANTHROPIC_API_KEY not set."""
+        service = HealthService()
+
+        with patch.dict("os.environ", {}, clear=True):
+            result = await service.check_anthropic()
+
+        assert result is False
+
+    @pytest.mark.asyncio()
+    async def test_fails_when_api_unreachable(self) -> None:
+        """check_anthropic() returns False on connection error."""
+        service = HealthService()
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(
+            side_effect=httpx.ConnectError("Connection refused"),
+        )
+        service._client = mock_client
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-key"}):
+            result = await service.check_anthropic()
+
+        assert result is False
+
+    @pytest.mark.asyncio()
+    async def test_fails_on_timeout(self) -> None:
+        """check_anthropic() returns False on timeout."""
+        service = HealthService()
+        mock_client = AsyncMock()
+        mock_client.post = AsyncMock(side_effect=TimeoutError("timed out"))
+        service._client = mock_client
+
+        with patch.dict("os.environ", {"ANTHROPIC_API_KEY": "sk-test-key"}):
+            result = await service.check_anthropic()
 
         assert result is False
 
@@ -325,24 +355,16 @@ class TestHealthStatusModel:
     async def test_health_status_has_correct_fields(self) -> None:
         """HealthStatus from check_all() has all required fields."""
         service = HealthService(database=None)
+        _patch_client(service, side_effect=httpx.ConnectError("refused"))
 
         with (
-            patch("Option_Alpha.services.health.httpx.AsyncClient") as mock_cls,
-            patch.object(
-                service,
-                "_yfinance_canary",
-                return_value=False,
-            ),
+            patch.object(service, "_yfinance_canary", return_value=False),
+            patch.object(service, "check_anthropic", return_value=False),
         ):
-            mock_client = AsyncMock()
-            mock_client.__aenter__ = AsyncMock(return_value=mock_client)
-            mock_client.__aexit__ = AsyncMock(return_value=False)
-            mock_client.get = AsyncMock(side_effect=httpx.ConnectError("refused"))
-            mock_cls.return_value = mock_client
-
             status = await service.check_all()
 
         assert hasattr(status, "ollama_available")
+        assert hasattr(status, "anthropic_available")
         assert hasattr(status, "yfinance_available")
         assert hasattr(status, "sqlite_available")
         assert hasattr(status, "ollama_models")
