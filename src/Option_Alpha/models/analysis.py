@@ -71,10 +71,7 @@ class AgentResponse(BaseModel):
     def validate_conviction(cls, value: float) -> float:
         """Conviction must be between 0.0 and 1.0."""
         if not CONVICTION_MIN <= value <= CONVICTION_MAX:
-            msg = (
-                f"conviction must be between {CONVICTION_MIN} and "
-                f"{CONVICTION_MAX}, got {value}"
-            )
+            msg = f"conviction must be between {CONVICTION_MIN} and {CONVICTION_MAX}, got {value}"
             raise ValueError(msg)
         return value
 
@@ -105,9 +102,6 @@ class TradeThesis(BaseModel):
     def validate_conviction(cls, value: float) -> float:
         """Conviction must be between 0.0 and 1.0."""
         if not CONVICTION_MIN <= value <= CONVICTION_MAX:
-            msg = (
-                f"conviction must be between {CONVICTION_MIN} and "
-                f"{CONVICTION_MAX}, got {value}"
-            )
+            msg = f"conviction must be between {CONVICTION_MIN} and {CONVICTION_MAX}, got {value}"
             raise ValueError(msg)
         return value

@@ -27,10 +27,16 @@ line-length = 99
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "ANN"]
-ignore = ["ANN101", "ANN102"]
+ignore = []
 
 [tool.mypy]
 python_version = "3.13"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
+
+[dependency-groups]
+dev = [
+    "mypy>=1.19.1",
+    "ruff>=0.15.1",
+]
