@@ -11,9 +11,6 @@ dependencies = [
     "pydantic>=2.12.5",
 ]
 
-[project.scripts]
-option-alpha = "Option_Alpha.cli:main"
-
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"

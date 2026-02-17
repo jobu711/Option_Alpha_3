@@ -51,7 +51,7 @@ class TestMarketContext:
                 f"MarketContext.{key} is a list -- model should be flat"
             )
 
-    def test_all_expected_fields_present(self, sample_market_context: MarketContext) -> None:
+    def test_all_expected_fields_present(self) -> None:
         """MarketContext has all expected fields for the debate agents."""
         expected_fields = {
             "ticker",
