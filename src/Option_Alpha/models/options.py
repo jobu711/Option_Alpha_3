@@ -28,6 +28,8 @@ class OptionGreeks(BaseModel):
     - vega must be >= 0
     """
 
+    model_config = ConfigDict(frozen=True)
+
     delta: float
     gamma: float
     theta: float

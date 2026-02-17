@@ -102,9 +102,8 @@ class TestQuote:
     def test_json_roundtrip(self, sample_quote: Quote) -> None:
         """Quote survives a full JSON serialize/deserialize cycle.
 
-        Note: mid and spread are Python properties (not computed_field),
-        so they are not included in JSON serialization. We compare the
-        serialized fields only.
+        mid and spread are computed_fields, so they are included in JSON
+        serialization output. The roundtrip preserves all fields.
         """
         json_str = sample_quote.model_dump_json()
         restored = Quote.model_validate_json(json_str)

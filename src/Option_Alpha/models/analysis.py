@@ -49,12 +49,22 @@ class MarketContext(BaseModel):
         return str(value)
 
 
+def _validate_conviction(value: float) -> float:
+    """Conviction must be between 0.0 and 1.0."""
+    if not CONVICTION_MIN <= value <= CONVICTION_MAX:
+        msg = f"conviction must be between {CONVICTION_MIN} and {CONVICTION_MAX}, got {value}"
+        raise ValueError(msg)
+    return value
+
+
 class AgentResponse(BaseModel):
     """Response from a single debate agent (bullish or bearish).
 
     Contains the analysis text, conviction score, and metadata about
     token usage and model identity for tracking costs and quality.
     """
+
+    model_config = ConfigDict(frozen=True)
 
     agent_role: str
     analysis: str
@@ -69,11 +79,7 @@ class AgentResponse(BaseModel):
     @field_validator("conviction")
     @classmethod
     def validate_conviction(cls, value: float) -> float:
-        """Conviction must be between 0.0 and 1.0."""
-        if not CONVICTION_MIN <= value <= CONVICTION_MAX:
-            msg = f"conviction must be between {CONVICTION_MIN} and {CONVICTION_MAX}, got {value}"
-            raise ValueError(msg)
-        return value
+        return _validate_conviction(value)
 
 
 class TradeThesis(BaseModel):
@@ -100,8 +106,4 @@ class TradeThesis(BaseModel):
     @field_validator("conviction")
     @classmethod
     def validate_conviction(cls, value: float) -> float:
-        """Conviction must be between 0.0 and 1.0."""
-        if not CONVICTION_MIN <= value <= CONVICTION_MAX:
-            msg = f"conviction must be between {CONVICTION_MIN} and {CONVICTION_MAX}, got {value}"
-            raise ValueError(msg)
-        return value
+        return _validate_conviction(value)

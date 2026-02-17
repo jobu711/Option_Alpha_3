@@ -111,6 +111,11 @@ class TestOptionGreeks:
         greeks = OptionGreeks(delta=-0.45, gamma=0.05, theta=-0.08, vega=0.12, rho=-0.02)
         assert greeks.rho == pytest.approx(-0.02, rel=1e-4)
 
+    def test_frozen_immutability(self, sample_option_greeks: OptionGreeks) -> None:
+        """OptionGreeks is frozen -- assigning to a field raises an error."""
+        with pytest.raises(ValidationError, match="frozen"):
+            sample_option_greeks.delta = 0.99  # type: ignore[misc]
+
 
 class TestOptionContract:
     """Tests for OptionContract with computed fields and immutability."""

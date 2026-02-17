@@ -7,7 +7,7 @@ serializers to prevent silent float conversion in JSON roundtrips.
 import datetime
 from decimal import Decimal
 
-from pydantic import BaseModel, ConfigDict, field_serializer
+from pydantic import BaseModel, ConfigDict, computed_field, field_serializer
 
 
 class OHLCV(BaseModel):
@@ -51,11 +51,13 @@ class Quote(BaseModel):
         """Serialize Decimal fields as strings to preserve precision."""
         return str(value)
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def mid(self) -> Decimal:
         """Mid price: (bid + ask) / 2, a better fair value estimate than last."""
         return (self.bid + self.ask) / 2
 
+    @computed_field  # type: ignore[prop-decorator]
     @property
     def spread(self) -> Decimal:
         """Bid-ask spread. Wide spread indicates illiquidity."""

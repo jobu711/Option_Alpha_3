@@ -189,6 +189,11 @@ class TestAgentResponse:
         )
         assert response_one.conviction == pytest.approx(1.0, abs=0.01)
 
+    def test_frozen_immutability(self, sample_agent_response: AgentResponse) -> None:
+        """AgentResponse is frozen -- assigning to a field raises an error."""
+        with pytest.raises(ValidationError, match="frozen"):
+            sample_agent_response.agent_role = "bear"  # type: ignore[misc]
+
     def test_greeks_cited_dict(self, sample_agent_response: AgentResponse) -> None:
         """greeks_cited maps Greek names to float values."""
         assert "delta" in sample_agent_response.greeks_cited
