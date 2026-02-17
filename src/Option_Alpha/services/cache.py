@@ -374,10 +374,14 @@ class ServiceCache:
         if row is None:
             return None
 
+        created_at = datetime.datetime.fromisoformat(row[2])
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=datetime.UTC)
+
         return CacheEntry(
             key=row[0],
             value=row[1],
-            created_at=datetime.datetime.fromisoformat(row[2]),
+            created_at=created_at,
             ttl_seconds=row[3],
         )
 
