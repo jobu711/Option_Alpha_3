@@ -101,6 +101,10 @@ phase_ruff() {
 
     cd "$PROJECT_ROOT" || exit 1
 
+    # Snapshot working-tree state before ruff so we only detect ruff's changes
+    local before_hash
+    before_hash=$(git diff -- '*.py' 2>/dev/null | git hash-object --stdin)
+
     # Run ruff check with auto-fix (suppress output — we only care about file changes)
     if [ "$MODE" = "staged" ]; then
         echo "$files" | xargs uv run ruff check --fix --force-exclude >/dev/null 2>&1 || true
@@ -110,12 +114,16 @@ phase_ruff() {
         uv run ruff format src/ >/dev/null 2>&1 || true
     fi
 
-    # Detect file changes via git
-    changed_files=$(git diff --name-only -- '*.py' 2>/dev/null || true)
+    # Compare working-tree diff to detect only ruff's changes (not pre-existing dirty files)
+    local after_hash
+    after_hash=$(git diff -- '*.py' 2>/dev/null | git hash-object --stdin)
 
-    if [ -n "$changed_files" ]; then
+    if [ "$before_hash" != "$after_hash" ]; then
+        # Ruff changed files — find which ones
+        changed_files=$(git diff --name-only -- '*.py' 2>/dev/null || true)
+
         # Re-stage changed files
-        if [ "$MODE" = "staged" ]; then
+        if [ "$MODE" = "staged" ] && [ -n "$changed_files" ]; then
             echo "$changed_files" | xargs git add 2>/dev/null
         fi
 
@@ -177,8 +185,36 @@ phase_compliance() {
     compliance_output=$(uv run python .claude/scripts/claude-md-compliance.py $compliance_args 2>/dev/null)
     compliance_exit=$?
 
+    # Fail closed: if the compliance tool crashed or produced invalid JSON, treat as FAIL
+    if [ "$compliance_exit" -ne 0 ] && [ "$compliance_exit" -ne 1 ]; then
+        COMPLIANCE_STATUS="FAIL"
+        OVERALL_EXIT=1
+        status_tag "COMPLIANCE" "FAIL" "(compliance tool crashed, exit $compliance_exit)"
+        return 0
+    fi
+
+    # Validate JSON output
+    local json_valid
+    json_valid=$(echo "$compliance_output" | python3 -c "import json,sys; json.load(sys.stdin); print('ok')" 2>/dev/null || \
+                 echo "$compliance_output" | python -c "import json,sys; json.load(sys.stdin); print('ok')" 2>/dev/null || \
+                 echo "fail")
+    if [ "$json_valid" != "ok" ]; then
+        COMPLIANCE_STATUS="FAIL"
+        OVERALL_EXIT=1
+        status_tag "COMPLIANCE" "FAIL" "(invalid JSON output from compliance tool)"
+        return 0
+    fi
+
     # Parse JSON output for auto-fixed file count
-    auto_fixed_count=$(echo "$compliance_output" | python -c "
+    auto_fixed_count=$(echo "$compliance_output" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    fixed = d.get('auto_fixed_files', [])
+    print(len(fixed))
+except Exception:
+    print(0)
+" 2>/dev/null || echo "$compliance_output" | python -c "
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -191,7 +227,15 @@ except Exception:
     # Re-stage auto-fixed files
     if [ "$auto_fixed_count" -gt 0 ]; then
         local fixed_files
-        fixed_files=$(echo "$compliance_output" | python -c "
+        fixed_files=$(echo "$compliance_output" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    for f in d.get('auto_fixed_files', []):
+        print(f)
+except Exception:
+    pass
+" 2>/dev/null || echo "$compliance_output" | python -c "
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -211,7 +255,15 @@ except Exception:
 
     # Check for remaining errors
     local error_count
-    error_count=$(echo "$compliance_output" | python -c "
+    error_count=$(echo "$compliance_output" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    errs = [v for v in d.get('violations', []) if v.get('severity') == 'error']
+    print(len(errs))
+except Exception:
+    print(0)
+" 2>/dev/null || echo "$compliance_output" | python -c "
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -227,7 +279,16 @@ except Exception:
         status_tag "COMPLIANCE" "FAIL" "(${error_count} violation(s))"
         if [ "$QUIET" = false ]; then
             # Show violations in human-readable form
-            echo "$compliance_output" | python -c "
+            echo "$compliance_output" | python3 -c "
+import json, sys
+try:
+    d = json.load(sys.stdin)
+    for v in d.get('violations', []):
+        if v.get('severity') == 'error':
+            print(f\"    [{v['check']:02d}] {v['file']}:{v['line']} — {v['rule']}\")
+except Exception:
+    pass
+" 2>/dev/null || echo "$compliance_output" | python -c "
 import json, sys
 try:
     d = json.load(sys.stdin)
@@ -242,7 +303,8 @@ except Exception:
     fi
 
     local passed total
-    passed=$(echo "$compliance_output" | python -c "import json,sys; print(json.load(sys.stdin).get('passed',0))" 2>/dev/null)
+    passed=$(echo "$compliance_output" | python3 -c "import json,sys; print(json.load(sys.stdin).get('passed',0))" 2>/dev/null || \
+             echo "$compliance_output" | python -c "import json,sys; print(json.load(sys.stdin).get('passed',0))" 2>/dev/null)
     total=17
     COMPLIANCE_STATUS="PASS"
     status_tag "COMPLIANCE" "PASS" "(${passed}/${total} checks)"
@@ -387,7 +449,7 @@ main() {
         log "${RED}=== RESULT: FAIL ===${NC}"
         log ""
         log "Fix the issues above before committing."
-        log "Run 'bash .claude/scripts/verify.sh --all --human' for details."
+        log "Run 'bash .claude/scripts/verify.sh --all' for details."
     fi
 
     exit "$OVERALL_EXIT"

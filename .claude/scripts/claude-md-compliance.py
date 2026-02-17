@@ -174,7 +174,7 @@ def check_03_bare_except(files: list[Path]) -> list[Violation]:
 
 
 def check_04_no_optional(files: list[Path]) -> list[Violation]:
-    """No X | None — use X | None. Auto-fixable."""
+    """No Optional[X] — use X | None. Auto-fixable."""
     pattern = re.compile(r"Optional\[")
     violations = []
     for path in files:
@@ -183,7 +183,7 @@ def check_04_no_optional(files: list[Path]) -> list[Violation]:
                 violations.append(
                     Violation(
                         4,
-                        "No X | None (use X | None)",
+                        "No Optional[X] (use X | None)",
                         _posix(path),
                         i,
                         line.strip(),
@@ -498,7 +498,8 @@ def check_17_reporting_disclaimer(files: list[Path]) -> list[Violation]:
             continue
         if path.name in ("disclaimer.py", "__init__.py"):
             continue
-        content = path.read_text(encoding="utf-8") if path.exists() else ""
+        lines = _read_lines(path)
+        content = "\n".join(lines)
         if "disclaimer" not in content:
             violations.append(
                 Violation(
@@ -546,10 +547,42 @@ TOTAL_CHECKS = 17  # including check 8 (mypy)
 # ---------------------------------------------------------------------------
 
 
+def _replace_optional(line: str) -> str:
+    """Replace Optional[X] with X | None, handling nested brackets correctly."""
+    result: list[str] = []
+    i = 0
+    prefix = "Optional["
+    while i < len(line):
+        if line[i:].startswith(prefix):
+            # Found Optional[, now find the matching ]
+            start = i + len(prefix)
+            depth = 1
+            j = start
+            while j < len(line) and depth > 0:
+                if line[j] == "[":
+                    depth += 1
+                elif line[j] == "]":
+                    depth -= 1
+                j += 1
+            if depth == 0:
+                # Extract inner type and replace
+                inner = line[start : j - 1]
+                result.append(inner)
+                result.append(" | None")
+                i = j
+            else:
+                # Unbalanced brackets — leave as-is
+                result.append(line[i])
+                i += 1
+        else:
+            result.append(line[i])
+            i += 1
+    return "".join(result)
+
+
 def autofix_optional(files: list[Path]) -> list[str]:
     """Replace Optional[X] with X | None. Returns list of modified file paths."""
     files = [f for f in files if not _is_dev_tooling(f)]
-    pattern = re.compile(r"Optional\[([^\]]+)\]")
     import_pattern = re.compile(r"from\s+typing\s+import\s+(.+)")
     modified: list[str] = []
     for path in files:
@@ -557,7 +590,7 @@ def autofix_optional(files: list[Path]) -> list[str]:
         changed = False
         new_lines: list[str] = []
         for line in lines:
-            new_line = pattern.sub(r"\1 | None", line)
+            new_line = _replace_optional(line)
             if new_line != line:
                 changed = True
             new_lines.append(new_line)

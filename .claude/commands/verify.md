@@ -7,7 +7,7 @@ allowed-tools: Bash, Read
 Run the self-healing pre-commit verification loop.
 
 ## Usage
-```
+```text
 /verify           # Check staged files only
 /verify all       # Check all source files
 ```

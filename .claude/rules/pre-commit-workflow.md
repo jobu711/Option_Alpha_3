@@ -4,7 +4,7 @@ Self-healing verification loop that gates every commit.
 
 ## Pipeline
 
-```
+```text
 Phase 1: RUFF (auto-fix) ←──┐
 Phase 2: COMPLIANCE (auto-fix) ←─┤ Loop (max 3x if files changed)
                              ────┘
