@@ -40,12 +40,14 @@ class TestHealthStatus:
         """HealthStatus with all services down is valid."""
         status = HealthStatus(
             ollama_available=False,
+            anthropic_available=False,
             yfinance_available=False,
             sqlite_available=False,
             ollama_models=[],
             last_check=datetime.datetime(2025, 1, 15, 15, 0, 0, tzinfo=datetime.UTC),
         )
         assert status.ollama_available is False
+        assert status.anthropic_available is False
         assert status.yfinance_available is False
         assert status.sqlite_available is False
         assert status.ollama_models == []
@@ -54,6 +56,7 @@ class TestHealthStatus:
         """Empty ollama_models list is valid (Ollama installed but no models pulled)."""
         status = HealthStatus(
             ollama_available=True,
+            anthropic_available=True,
             yfinance_available=True,
             sqlite_available=True,
             ollama_models=[],
@@ -70,6 +73,7 @@ class TestHealthStatus:
         """Multiple Ollama model names are stored correctly."""
         status = HealthStatus(
             ollama_available=True,
+            anthropic_available=True,
             yfinance_available=True,
             sqlite_available=True,
             ollama_models=["llama3:70b", "llama3:8b", "mistral:7b", "codellama:34b"],
