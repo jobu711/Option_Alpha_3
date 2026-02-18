@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect, useRef } from 'react'
 import { PageShell } from '../components/layout'
 import { Button, Card, Spinner } from '../components/common'
 import {
@@ -9,34 +9,9 @@ import {
   type TickerScoreRow,
 } from '../components/scan'
 import { useApi } from '../hooks/useApi'
+import { useSSE } from '../hooks/useSSE'
 import { api } from '../api/client'
-
-// ---------------------------------------------------------------------------
-// API response types (matching backend Pydantic models)
-// ---------------------------------------------------------------------------
-
-interface ScanRunResponse {
-  id: string
-  started_at: string
-  completed_at: string | null
-  status: string
-  preset: string
-  sectors: string[]
-  ticker_count: number
-  top_n: number
-}
-
-interface TickerScoreResponse {
-  ticker: string
-  score: number
-  signals: Record<string, number>
-  rank: number
-}
-
-interface ScanRunWithScoresResponse {
-  scan_run: ScanRunResponse
-  scores: TickerScoreResponse[]
-}
+import type { ScanRunResponse } from '../api/client'
 
 // ---------------------------------------------------------------------------
 // Component
@@ -49,6 +24,13 @@ export function ScanResults() {
   const [loadingResults, setLoadingResults] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [selectedScanId, setSelectedScanId] = useState<string | null>(null)
+
+  useEffect(() => {
+    document.title = 'Scan Results | Option Alpha'
+    return () => {
+      document.title = 'Option Alpha'
+    }
+  }, [])
 
   // Fetch recent scan history
   const {
@@ -71,7 +53,7 @@ export function ScanResults() {
         body.tickers = config.tickers
       }
 
-      const result = (await api.scan.start(body)) as ScanRunResponse
+      const result = await api.scan.start(body)
       setActiveScanId(result.id)
       setSelectedScanId(result.id)
     } catch (err: unknown) {
@@ -87,9 +69,9 @@ export function ScanResults() {
     async (scanId: string) => {
       setLoadingResults(true)
       try {
-        const result = (await api.scan.get(scanId)) as ScanRunWithScoresResponse
+        const result = await api.scan.get(scanId)
         setScores(
-          result.scores.map((s: TickerScoreResponse) => ({
+          result.scores.map((s) => ({
             ticker: s.ticker,
             score: s.score,
             signals: s.signals,
@@ -118,9 +100,9 @@ export function ScanResults() {
     setScores([])
 
     try {
-      const result = (await api.scan.get(scanId)) as ScanRunWithScoresResponse
+      const result = await api.scan.get(scanId)
       setScores(
-        result.scores.map((s: TickerScoreResponse) => ({
+        result.scores.map((s) => ({
           ticker: s.ticker,
           score: s.score,
           signals: s.signals,
@@ -316,9 +298,6 @@ function ScanProgressWithCompletion({
 // ---------------------------------------------------------------------------
 // useSSEWithCompletion — hook that calls onComplete when scan finishes
 // ---------------------------------------------------------------------------
-
-import { useEffect, useRef } from 'react'
-import { useSSE } from '../hooks/useSSE'
 
 interface SSEProgressData {
   phase: string
