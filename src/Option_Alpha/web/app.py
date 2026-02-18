@@ -14,7 +14,14 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from Option_Alpha.data.database import Database
 from Option_Alpha.web.middleware import RequestLoggingMiddleware, register_exception_handlers
+from Option_Alpha.web.routes.debate import router as debate_router
 from Option_Alpha.web.routes.health import router as health_router
+from Option_Alpha.web.routes.report import router as report_router
+from Option_Alpha.web.routes.scan import router as scan_router
+from Option_Alpha.web.routes.settings import router as settings_router
+from Option_Alpha.web.routes.ticker import router as ticker_router
+from Option_Alpha.web.routes.universe import router as universe_router
+from Option_Alpha.web.routes.watchlist import router as watchlist_router
 
 logger = logging.getLogger(__name__)
 
@@ -67,5 +74,12 @@ def create_app() -> FastAPI:
 
     # Routers — health at root, others under /api
     app.include_router(health_router)
+    app.include_router(scan_router, prefix="/api")
+    app.include_router(debate_router, prefix="/api")
+    app.include_router(ticker_router, prefix="/api")
+    app.include_router(watchlist_router, prefix="/api")
+    app.include_router(universe_router, prefix="/api")
+    app.include_router(report_router, prefix="/api")
+    app.include_router(settings_router, prefix="/api")
 
     return app

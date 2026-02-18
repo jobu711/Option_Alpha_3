@@ -19,6 +19,7 @@ from Option_Alpha.services.health import HealthService
 from Option_Alpha.services.market_data import MarketDataService
 from Option_Alpha.services.options_data import OptionsDataService
 from Option_Alpha.services.rate_limiter import RateLimiter
+from Option_Alpha.services.universe import UniverseService
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,13 @@ async def get_health_service(
 ) -> HealthService:
     """Return a HealthService with the request-scoped Database."""
     return HealthService(database=db)
+
+
+async def get_universe_service() -> UniverseService:
+    """Return a UniverseService with shared rate limiter and cache."""
+    rate_limiter = RateLimiter()
+    cache = ServiceCache()
+    return UniverseService(cache=cache, rate_limiter=rate_limiter)
 
 
 async def validate_ticker_symbol(

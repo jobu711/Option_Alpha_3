@@ -103,6 +103,17 @@ class Repository:
             return None
         return _row_to_scan_run(row)
 
+    async def list_scan_runs(self, *, limit: int = 20, offset: int = 0) -> list[ScanRun]:
+        """Return scan runs ordered by most recent, with pagination."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT id, started_at, completed_at, status, preset, sectors, "
+            "ticker_count, top_n FROM scan_runs ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_scan_run(row) for row in rows]
+
     async def get_scores_for_scan(self, scan_run_id: str) -> list[TickerScore]:
         """Return all TickerScores for a given scan run, ordered by rank."""
         conn = self._db.connection
@@ -180,6 +191,28 @@ class Repository:
             ),
         )
         await conn.commit()
+
+    async def get_debate_by_id(self, debate_id: int) -> TradeThesis | None:
+        """Return a single AI thesis by its database row ID, or None if not found."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT full_thesis FROM ai_theses WHERE id = ?",
+            (debate_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return TradeThesis.model_validate_json(row[0])
+
+    async def list_debates(self, *, limit: int = 20, offset: int = 0) -> list[TradeThesis]:
+        """Return recent AI theses across all tickers, with pagination."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT full_thesis FROM ai_theses ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        rows = await cursor.fetchall()
+        return [TradeThesis.model_validate_json(row[0]) for row in rows]
 
     async def get_debate_history(
         self,
