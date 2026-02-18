@@ -72,26 +72,41 @@ def _index_to_alpha_symbol(index: int) -> str:
 
 
 def _build_csv(count: int = 150) -> str:
-    """Build a mock CBOE CSV with the given number of tickers."""
-    lines = ["Symbol,Company Name,Sector"]
-    # Include some well-known large caps for tier testing
+    """Build a mock CBOE CSV matching the real section-based format.
+
+    The real CBOE CSV has metadata lines at the top, then sections:
+    - "Available Weeklys - Exchange Traded Products (ETFs and ETNs)"
+    - "Available Weeklys - Equity"
+    Each section has two-column quoted rows: "SYMBOL","COMPANY NAME".
+    """
+    # Well-known symbols for classification testing
     large_caps = ["AAPL", "MSFT", "AMZN", "GOOGL", "META"]
     etfs = ["SPY", "QQQ", "IWM"]
 
-    for i in range(count):
-        if i < len(large_caps):
-            symbol = large_caps[i]
-            name = f"{symbol} Inc."
-            sector = "Information Technology"
-        elif i < len(large_caps) + len(etfs):
-            symbol = etfs[i - len(large_caps)]
-            name = f"{symbol} ETF Trust"
-            sector = "Financials"
-        else:
-            symbol = _index_to_alpha_symbol(i)
-            name = f"Test Company {symbol}"
-            sector = GICS_SECTORS[i % len(GICS_SECTORS)]
-        lines.append(f"{symbol},{name},{sector}")
+    lines: list[str] = []
+
+    # Metadata header (mimics real CSV)
+    lines.append("List of Available Weekly Options")
+    lines.append('"Standard","02/27/26","","",""')
+    lines.append("")
+
+    # ETF section
+    lines.append("Available Weeklys - Exchange Traded Products (ETFs and ETNs)")
+    for etf in etfs:
+        lines.append(f'"{etf}","{etf} ETF Trust"')
+
+    lines.append("")
+
+    # Equity section
+    lines.append("Available Weeklys - Equity")
+    for lc in large_caps:
+        lines.append(f'"{lc}","{lc} Inc."')
+
+    # Fill remaining tickers as equities
+    remaining = count - len(large_caps) - len(etfs)
+    for i in range(max(0, remaining)):
+        symbol = _index_to_alpha_symbol(i)
+        lines.append(f'"{symbol}","Test Company {symbol}"')
 
     return "\n".join(lines)
 
@@ -467,27 +482,43 @@ class TestGetStats:
 
 
 class TestCSVParsing:
-    """Tests for CSV parsing edge cases."""
+    """Tests for CSV parsing edge cases with section-based CBOE format."""
 
     def test_skips_non_alpha_symbols(self, service: UniverseService) -> None:
         """Symbols with special characters are skipped."""
-        csv_text = "Symbol,Company Name,Sector\nAAPL,Apple,Tech\nA-B,Weird,Tech\n"
+        csv_text = (
+            "List of Available Weekly Options\n"
+            "\n"
+            "Available Weeklys - Equity\n"
+            '"AAPL","Apple Inc."\n'
+            '"A-B","Weird Corp"\n'
+        )
         tickers = service._parse_csv(csv_text)
         assert len(tickers) == 1
         assert tickers[0].symbol == "AAPL"
 
     def test_skips_empty_symbols(self, service: UniverseService) -> None:
         """Rows with empty symbol are skipped."""
-        csv_text = "Symbol,Company Name,Sector\n,NoSymbol,Tech\nAAPL,Apple,Tech\n"
+        csv_text = 'Available Weeklys - Equity\n"","NoSymbol Corp"\n"AAPL","Apple Inc."\n'
         tickers = service._parse_csv(csv_text)
         assert len(tickers) == 1
+        assert tickers[0].symbol == "AAPL"
 
-    def test_handles_alternative_column_names(self, service: UniverseService) -> None:
-        """Parser handles different column name variations."""
-        csv_text = "Ticker,Name,Sector\nMSFT,Microsoft,Technology\n"
+    def test_handles_etf_section(self, service: UniverseService) -> None:
+        """Parser correctly assigns etf asset_type from ETF section."""
+        csv_text = (
+            "Available Weeklys - Exchange Traded Products (ETFs and ETNs)\n"
+            '"SPY","SPDR S&P 500 ETF Trust"\n'
+            "\n"
+            "Available Weeklys - Equity\n"
+            '"MSFT","Microsoft Corp"\n'
+        )
         tickers = service._parse_csv(csv_text)
-        assert len(tickers) == 1
-        assert tickers[0].symbol == "MSFT"
+        assert len(tickers) == 2
+        spy = next(t for t in tickers if t.symbol == "SPY")
+        msft = next(t for t in tickers if t.symbol == "MSFT")
+        assert spy.asset_type == "etf"
+        assert msft.asset_type == "equity"
 
 
 # ---------------------------------------------------------------------------

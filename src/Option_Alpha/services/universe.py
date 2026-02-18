@@ -318,9 +318,11 @@ class UniverseService:
     def _parse_csv(self, csv_text: str) -> list[TickerInfo]:
         """Parse CBOE CSV text into TickerInfo models with pre-filters.
 
-        The CBOE CSV typically has columns for symbol, company name, and
-        potentially other metadata. This parser handles common formats
-        and applies min_price/min_volume pre-filters where data is available.
+        The CBOE weekly options CSV is section-based (not a standard header CSV).
+        It starts with metadata/expiration info, then has sections separated by
+        blank lines and headers like "Available Weeklys - Exchange Traded Products"
+        and "Available Weeklys - Equity". Ticker rows are two-column quoted CSV:
+        ``"SYMBOL","COMPANY NAME"``.
 
         Returns:
             List of TickerInfo models passing pre-filter checks.
@@ -328,49 +330,57 @@ class UniverseService:
         now = datetime.datetime.now(datetime.UTC)
         tickers: list[TickerInfo] = []
 
-        reader = csv.DictReader(io.StringIO(csv_text))
+        # Section headers that mark where ticker data begins
+        etf_header = "Available Weeklys - Exchange Traded Products"
+        equity_header = "Available Weeklys - Equity"
 
-        for row in reader:
-            # CBOE CSV columns vary; try common column names
-            symbol = (
-                (
-                    row.get("Symbol", "")
-                    or row.get("symbol", "")
-                    or row.get("Ticker", "")
-                    or row.get("ticker", "")
-                )
-                .strip()
-                .upper()
-            )
+        section: str | None = None
+
+        for line in csv_text.splitlines():
+            stripped = line.strip()
+
+            # Detect section transitions
+            if stripped.startswith(etf_header):
+                section = "etf"
+                continue
+            if stripped.startswith(equity_header):
+                section = "equity"
+                continue
+
+            # Skip lines until we enter a ticker section
+            if section is None:
+                continue
+
+            # Skip blank lines (section separators)
+            if not stripped:
+                continue
+
+            # Parse the two-column quoted CSV row
+            parsed = list(csv.reader(io.StringIO(stripped)))
+            if not parsed or not parsed[0]:
+                continue
+
+            fields = parsed[0]
+            symbol = fields[0].strip().upper()
+            name = fields[1].strip() if len(fields) > 1 else symbol
 
             if not symbol:
                 continue
 
-            # Skip non-equity symbols (those with special characters)
+            # Skip non-equity symbols (those with special characters like '/')
             if not symbol.isalpha():
                 continue
 
-            name = (
-                row.get("Company Name", "")
-                or row.get("company_name", "")
-                or row.get("Name", "")
-                or row.get("name", "")
-                or ""
-            ).strip()
-
-            # Determine asset type (ETF vs equity heuristic)
-            asset_type = self._classify_asset_type(symbol, name)
+            # Determine asset type from section and heuristics
+            asset_type = "etf" if section == "etf" else self._classify_asset_type(symbol, name)
 
             # Determine market cap tier (default to unknown)
             market_cap_tier = self._classify_market_cap_tier(symbol, asset_type)
 
-            # Determine sector (default to unknown)
-            sector = row.get("Sector", "") or row.get("sector", "") or "Unknown"
-
             ticker_info = TickerInfo(
                 symbol=symbol,
                 name=name if name else symbol,
-                sector=sector.strip(),
+                sector="Unknown",
                 market_cap_tier=market_cap_tier,
                 asset_type=asset_type,
                 source="cboe",
