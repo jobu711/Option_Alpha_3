@@ -374,14 +374,13 @@ async def _scan_async(
                         if not vwap_series.dropna().empty:
                             indicators["vwap_deviation"] = float(vwap_series.dropna().iloc[-1])
 
-                        # Options-specific (placeholders where data is not available)
-                        # IV rank and IV percentile require historical IV data which is
-                        # not available from basic OHLCV. These are set to default
-                        # values; the scoring pipeline handles missing indicators.
-                        indicators["iv_rank"] = 50.0
-                        indicators["iv_percentile"] = 50.0
-                        indicators["put_call_ratio"] = 1.0
-                        indicators["max_pain"] = 50.0
+                        # Options-specific indicators (iv_rank, iv_percentile,
+                        # put_call_ratio, max_pain) are omitted here because they
+                        # require historical IV / options chain data not available
+                        # from basic OHLCV.  The normalization pipeline assigns
+                        # DEFAULT_PERCENTILE (50.0) to any missing indicator
+                        # automatically, which is cleaner than hard-coding placeholders
+                        # that would be indistinguishable from real data.
 
                         if indicators:
                             universe_indicators[ticker_sym] = indicators

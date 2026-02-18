@@ -459,3 +459,13 @@ class TestBuildReportFilename:
             )
         assert "185C" in result
         assert "185.00" not in result
+
+    def test_strike_zero_does_not_produce_empty_string(self) -> None:
+        """Decimal('0') must produce '0' in filename, not empty string."""
+        with self._patch_today(2025, 3, 15):
+            result = build_report_filename(
+                ticker="AAPL",
+                strike=Decimal("0"),
+                option_type=OptionType.CALL,
+            )
+        assert "_0C_" in result

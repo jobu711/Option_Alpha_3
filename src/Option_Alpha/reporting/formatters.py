@@ -358,7 +358,8 @@ def build_report_filename(
     date_str = datetime.date.today().isoformat()
     type_char = "C" if option_type == OptionType.CALL else "P"
 
-    # Format strike: remove trailing zeros but keep at least one decimal
-    strike_str = f"{strike:f}".rstrip("0").rstrip(".")
+    # Format strike: remove trailing zeros but keep at least one decimal.
+    # Guard against Decimal("0") which would rstrip to empty string.
+    strike_str = f"{strike:f}".rstrip("0").rstrip(".") or "0"
 
     return f"{ticker.upper()}_{date_str}_{strike_str}{type_char}_analysis.{ext}"
