@@ -4,6 +4,7 @@ import { Button, Spinner } from '../components/common'
 import { BullBearMeter } from '../components/charts/BullBearMeter'
 import { DebateView, TradeThesisSection } from '../components/debate'
 import { PageShell } from '../components/layout'
+import { api } from '../api/client'
 import type { DebateResult } from '../types/debate'
 
 /** Polling interval when debate is still running (ms) */
@@ -20,6 +21,7 @@ export function DebateDetail() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [pollCount, setPollCount] = useState(0)
+  const [downloading, setDownloading] = useState(false)
 
   const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -73,6 +75,17 @@ export function DebateDetail() {
   }, [id, pollCount])
 
   useEffect(() => {
+    if (debate?.ticker) {
+      document.title = `Debate: ${debate.ticker} | Option Alpha`
+    } else {
+      document.title = `Debate #${id ?? '\u2014'} | Option Alpha`
+    }
+    return () => {
+      document.title = 'Option Alpha'
+    }
+  }, [debate, id])
+
+  useEffect(() => {
     void fetchDebate()
 
     return () => {
@@ -90,20 +103,55 @@ export function DebateDetail() {
     void fetchDebate()
   }
 
+  const handleDownloadReport = useCallback(async () => {
+    if (!debate || !id) return
+
+    setDownloading(true)
+    try {
+      const blob = await api.report.download(debate.id)
+      const url = URL.createObjectURL(blob)
+      const anchor = document.createElement('a')
+      anchor.href = url
+      anchor.download = `${debate.ticker}_report.md`
+      document.body.appendChild(anchor)
+      anchor.click()
+      document.body.removeChild(anchor)
+      URL.revokeObjectURL(url)
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : 'Failed to download report'
+      setError(message)
+    } finally {
+      setDownloading(false)
+    }
+  }, [debate, id])
+
   const isPolling =
     debate !== null &&
     (debate.status === 'pending' || debate.status === 'running')
 
   return (
     <PageShell title={`Debate #${id ?? '\u2014'}`}>
-      {/* Back navigation */}
-      <div className="mb-3">
+      {/* Back navigation and actions */}
+      <div className="mb-3 flex items-center gap-2">
         <Button
           variant="secondary"
           onClick={() => navigate(-1)}
         >
           &larr; Back
         </Button>
+
+        {/* Download report button — only for completed debates */}
+        {debate?.status === 'completed' && debate.thesis && (
+          <Button
+            variant="secondary"
+            onClick={() => void handleDownloadReport()}
+            disabled={downloading}
+            data-testid="download-report-btn"
+          >
+            {downloading ? 'DOWNLOADING...' : 'DOWNLOAD REPORT (.md)'}
+          </Button>
+        )}
       </div>
 
       {/* Loading state */}
