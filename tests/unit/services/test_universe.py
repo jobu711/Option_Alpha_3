@@ -72,41 +72,27 @@ def _index_to_alpha_symbol(index: int) -> str:
 
 
 def _build_csv(count: int = 150) -> str:
-    """Build a mock CBOE CSV matching the real section-based format.
+    """Build a mock CBOE equity & index options directory CSV.
 
-    The real CBOE CSV has metadata lines at the top, then sections:
-    - "Available Weeklys - Exchange Traded Products (ETFs and ETNs)"
-    - "Available Weeklys - Equity"
-    Each section has two-column quoted rows: "SYMBOL","COMPANY NAME".
+    The real CBOE directory CSV has a header row:
+    ``Company Name, Stock Symbol, DPM Name, Post/Station``
     """
-    # Well-known symbols for classification testing
     large_caps = ["AAPL", "MSFT", "AMZN", "GOOGL", "META"]
     etfs = ["SPY", "QQQ", "IWM"]
 
     lines: list[str] = []
+    lines.append("Company Name, Stock Symbol, DPM Name, Post/Station")
 
-    # Metadata header (mimics real CSV)
-    lines.append("List of Available Weekly Options")
-    lines.append('"Standard","02/27/26","","",""')
-    lines.append("")
-
-    # ETF section
-    lines.append("Available Weeklys - Exchange Traded Products (ETFs and ETNs)")
     for etf in etfs:
-        lines.append(f'"{etf}","{etf} ETF Trust"')
+        lines.append(f'"{etf} ETF Trust","{etf}","Market Maker LLC","1/1"')
 
-    lines.append("")
-
-    # Equity section
-    lines.append("Available Weeklys - Equity")
     for lc in large_caps:
-        lines.append(f'"{lc}","{lc} Inc."')
+        lines.append(f'"{lc} Inc.","{lc}","Market Maker LLC","2/1"')
 
-    # Fill remaining tickers as equities
     remaining = count - len(large_caps) - len(etfs)
     for i in range(max(0, remaining)):
         symbol = _index_to_alpha_symbol(i)
-        lines.append(f'"{symbol}","Test Company {symbol}"')
+        lines.append(f'"Test Company {symbol}","{symbol}","Market Maker LLC","2/1"')
 
     return "\n".join(lines)
 
@@ -482,16 +468,14 @@ class TestGetStats:
 
 
 class TestCSVParsing:
-    """Tests for CSV parsing edge cases with section-based CBOE format."""
+    """Tests for CSV parsing edge cases with CBOE directory format."""
 
     def test_skips_non_alpha_symbols(self, service: UniverseService) -> None:
         """Symbols with special characters are skipped."""
         csv_text = (
-            "List of Available Weekly Options\n"
-            "\n"
-            "Available Weeklys - Equity\n"
-            '"AAPL","Apple Inc."\n'
-            '"A-B","Weird Corp"\n'
+            "Company Name, Stock Symbol, DPM Name, Post/Station\n"
+            '"Apple Inc.","AAPL","MM LLC","2/1"\n'
+            '"Weird Corp","A-B","MM LLC","2/1"\n'
         )
         tickers = service._parse_csv(csv_text)
         assert len(tickers) == 1
@@ -499,19 +483,21 @@ class TestCSVParsing:
 
     def test_skips_empty_symbols(self, service: UniverseService) -> None:
         """Rows with empty symbol are skipped."""
-        csv_text = 'Available Weeklys - Equity\n"","NoSymbol Corp"\n"AAPL","Apple Inc."\n'
+        csv_text = (
+            "Company Name, Stock Symbol, DPM Name, Post/Station\n"
+            '"NoSymbol Corp","","MM LLC","2/1"\n'
+            '"Apple Inc.","AAPL","MM LLC","2/1"\n'
+        )
         tickers = service._parse_csv(csv_text)
         assert len(tickers) == 1
         assert tickers[0].symbol == "AAPL"
 
-    def test_handles_etf_section(self, service: UniverseService) -> None:
-        """Parser correctly assigns etf asset_type from ETF section."""
+    def test_classifies_etfs_by_name_heuristic(self, service: UniverseService) -> None:
+        """Parser classifies ETFs using name-based heuristics."""
         csv_text = (
-            "Available Weeklys - Exchange Traded Products (ETFs and ETNs)\n"
-            '"SPY","SPDR S&P 500 ETF Trust"\n'
-            "\n"
-            "Available Weeklys - Equity\n"
-            '"MSFT","Microsoft Corp"\n'
+            "Company Name, Stock Symbol, DPM Name, Post/Station\n"
+            '"SPDR S&P 500 ETF Trust","SPY","MM LLC","1/1"\n'
+            '"Microsoft Corp","MSFT","MM LLC","2/1"\n'
         )
         tickers = service._parse_csv(csv_text)
         assert len(tickers) == 2
