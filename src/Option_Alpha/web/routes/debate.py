@@ -28,6 +28,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/debate", tags=["debate"])
 
+# Active debate tasks keyed by ticker symbol. Storing references prevents
+# fire-and-forget tasks from being garbage-collected and allows exception logging.
+_debate_tasks: dict[str, asyncio.Task[None]] = {}
+
 # ---------------------------------------------------------------------------
 # Response models (web-layer output schemas)
 # ---------------------------------------------------------------------------
@@ -154,7 +158,17 @@ async def start_debate(
     Kicks off the debate pipeline as a background task and returns immediately.
     Poll GET /api/debate or use the ticker's debate history to retrieve results.
     """
-    asyncio.create_task(_run_debate_task(symbol, market_service, repo))
+    task = asyncio.create_task(_run_debate_task(symbol, market_service, repo))
+    _debate_tasks[symbol] = task
+
+    def _on_debate_done(t: asyncio.Task[None], *, _symbol: str = symbol) -> None:
+        """Clean up task reference and log any unhandled exception."""
+        _debate_tasks.pop(_symbol, None)
+        exc = t.exception() if not t.cancelled() else None
+        if exc is not None:
+            logger.error("Debate task for %s failed: %s", _symbol, exc)
+
+    task.add_done_callback(_on_debate_done)
 
     logger.info("Debate started for %s", symbol)
     return DebateStarted(

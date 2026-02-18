@@ -137,7 +137,7 @@ async def refresh_universe(
 @router.get("/search", response_model=UniverseSearchResponse)
 async def search_universe(
     svc: Annotated[UniverseService, Depends(get_universe_service)],
-    q: Annotated[str, Query(min_length=1, max_length=10)] = "",
+    q: Annotated[str, Query(min_length=1, max_length=10, description="Search query")],
 ) -> UniverseSearchResponse:
     """Search universe tickers by symbol or name substring.
 

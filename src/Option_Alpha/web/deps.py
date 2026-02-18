@@ -14,11 +14,9 @@ from fastapi import Depends, HTTPException, Path, Request
 
 from Option_Alpha.data.database import Database
 from Option_Alpha.data.repository import Repository
-from Option_Alpha.services.cache import ServiceCache
 from Option_Alpha.services.health import HealthService
 from Option_Alpha.services.market_data import MarketDataService
 from Option_Alpha.services.options_data import OptionsDataService
-from Option_Alpha.services.rate_limiter import RateLimiter
 from Option_Alpha.services.universe import UniverseService
 
 logger = logging.getLogger(__name__)
@@ -45,18 +43,25 @@ async def get_repository(
     return Repository(db)
 
 
-async def get_market_data_service() -> MarketDataService:
-    """Return a MarketDataService with shared rate limiter and cache."""
-    rate_limiter = RateLimiter()
-    cache = ServiceCache()
-    return MarketDataService(rate_limiter=rate_limiter, cache=cache)
+async def get_market_data_service(request: Request) -> MarketDataService:
+    """Return a MarketDataService using the app-wide rate limiter and cache.
+
+    The shared RateLimiter and ServiceCache are created once during lifespan
+    startup and stored on ``app.state`` so that rate limiting is effective
+    and cached data persists across requests.
+    """
+    return MarketDataService(
+        rate_limiter=request.app.state.rate_limiter,
+        cache=request.app.state.cache,
+    )
 
 
-async def get_options_data_service() -> OptionsDataService:
-    """Return an OptionsDataService with shared rate limiter and cache."""
-    rate_limiter = RateLimiter()
-    cache = ServiceCache()
-    return OptionsDataService(rate_limiter=rate_limiter, cache=cache)
+async def get_options_data_service(request: Request) -> OptionsDataService:
+    """Return an OptionsDataService using the app-wide rate limiter and cache."""
+    return OptionsDataService(
+        rate_limiter=request.app.state.rate_limiter,
+        cache=request.app.state.cache,
+    )
 
 
 async def get_health_service(
@@ -66,11 +71,12 @@ async def get_health_service(
     return HealthService(database=db)
 
 
-async def get_universe_service() -> UniverseService:
-    """Return a UniverseService with shared rate limiter and cache."""
-    rate_limiter = RateLimiter()
-    cache = ServiceCache()
-    return UniverseService(cache=cache, rate_limiter=rate_limiter)
+async def get_universe_service(request: Request) -> UniverseService:
+    """Return a UniverseService using the app-wide rate limiter and cache."""
+    return UniverseService(
+        cache=request.app.state.cache,
+        rate_limiter=request.app.state.rate_limiter,
+    )
 
 
 async def validate_ticker_symbol(

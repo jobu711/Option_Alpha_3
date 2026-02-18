@@ -13,6 +13,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from Option_Alpha.data.database import Database
+from Option_Alpha.services.cache import ServiceCache
+from Option_Alpha.services.rate_limiter import RateLimiter
 from Option_Alpha.web.middleware import RequestLoggingMiddleware, register_exception_handlers
 from Option_Alpha.web.routes.debate import router as debate_router
 from Option_Alpha.web.routes.health import router as health_router
@@ -35,6 +37,12 @@ async def _lifespan(app: FastAPI) -> AsyncGenerator[None]:
     db = Database(_DB_PATH)
     await db.connect()
     app.state.database = db
+
+    # Shared singletons — rate limiter and cache must persist across requests
+    # so that rate limiting actually works and cached data is reused.
+    app.state.rate_limiter = RateLimiter()
+    app.state.cache = ServiceCache()
+
     logger.info("Application startup complete — database connected.")
     try:
         yield

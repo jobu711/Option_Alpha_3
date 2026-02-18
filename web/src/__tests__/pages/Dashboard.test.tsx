@@ -25,35 +25,28 @@ const mockScans = [
 ]
 
 const mockHealth = {
-  ollama: true,
-  anthropic: false,
-  yfinance: true,
-  sqlite: true,
-  overall: true,
-  checked_at: '2024-12-15T10:30:00Z',
+  ollama_available: true,
+  anthropic_available: false,
+  yfinance_available: true,
+  sqlite_available: true,
+  ollama_models: ['llama3.1:8b'],
+  last_check: '2024-12-15T10:30:00Z',
 }
 
+// Backend returns raw TradeThesis objects, not DebateResult wrappers
 const mockDebates = [
   {
-    id: 42,
-    ticker: 'NVDA',
-    status: 'completed',
-    thesis: {
-      direction: 'bullish',
-      conviction: 0.72,
-      entry_rationale: 'Strong momentum.',
-      risk_factors: ['Earnings risk'],
-      recommended_action: 'Buy call spread.',
-      bull_summary: 'Bullish technicals.',
-      bear_summary: 'Near highs.',
-      model_used: 'llama3.1:8b',
-      total_tokens: 4810,
-      duration_ms: 12450,
-      disclaimer: 'For educational purposes only.',
-    },
-    agents: { bull: null, bear: null, risk: null },
-    is_fallback: false,
-    created_at: '2024-12-15T10:30:00Z',
+    direction: 'bullish',
+    conviction: 0.72,
+    entry_rationale: 'Strong momentum.',
+    risk_factors: ['Earnings risk'],
+    recommended_action: 'Buy call spread.',
+    bull_summary: 'Bullish technicals.',
+    bear_summary: 'Near highs.',
+    model_used: 'llama3.1:8b',
+    total_tokens: 4810,
+    duration_ms: 12450,
+    disclaimer: 'For educational purposes only.',
   },
 ]
 
@@ -171,11 +164,12 @@ describe('Dashboard page', () => {
     mockFetchByUrl()
     renderDashboard()
 
+    // The backend returns raw TradeThesis without ticker; the UI shows
+    // direction badge and conviction from the thesis after transformation.
     await waitFor(() => {
-      expect(screen.getByText('NVDA')).toBeInTheDocument()
+      expect(screen.getByText('BULLISH')).toBeInTheDocument()
     })
 
-    expect(screen.getByText('BULLISH')).toBeInTheDocument()
     expect(screen.getByText('72%')).toBeInTheDocument()
   })
 

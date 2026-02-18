@@ -1,10 +1,11 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { PageShell } from '../components/layout'
 import { Badge, Button, Card, Spinner } from '../components/common'
 import { useApi } from '../hooks/useApi'
 import type { ScanRunResponse, HealthStatus, WatchlistResponse } from '../api/client'
-import type { DebateResult } from '../types/debate'
+import type { TradeThesis } from '../types/debate'
+import { toDebateResult } from '../types/debate'
 
 export function Dashboard() {
   const navigate = useNavigate()
@@ -21,14 +22,14 @@ export function Dashboard() {
     loading: loadingHealth,
     error: healthError,
     refetch: refetchHealth,
-  } = useApi<HealthStatus>('/health')
+  } = useApi<HealthStatus>('/health', { baseUrl: '' })
 
   const {
-    data: debates,
+    data: rawDebates,
     loading: loadingDebates,
     error: debateError,
     refetch: refetchDebates,
-  } = useApi<DebateResult[]>('/debate')
+  } = useApi<TradeThesis[]>('/debate')
 
   const {
     data: watchlistData,
@@ -47,11 +48,14 @@ export function Dashboard() {
   const latestScan =
     recentScans && recentScans.length > 0 ? recentScans[0] : null
 
-  const recentDebates = debates
-    ? debates
-        .filter((d) => d.status === 'completed' && d.thesis)
-        .slice(0, 5)
-    : []
+  // Transform raw TradeThesis objects from the backend into DebateResult UI shapes.
+  // Every persisted thesis is completed, so all pass the filter.
+  const debates = useMemo(
+    () => (rawDebates ? rawDebates.map((t, i) => toDebateResult(t, i)) : []),
+    [rawDebates],
+  )
+
+  const recentDebates = debates.slice(0, 5)
 
   const watchlistTickers = watchlistData?.tickers ?? []
 
@@ -131,10 +135,10 @@ export function Dashboard() {
             )}
             {!loadingHealth && !healthError && health && (
               <div className="flex flex-col gap-1.5">
-                <HealthRow label="Ollama" ok={health.ollama} />
-                <HealthRow label="Anthropic" ok={health.anthropic} />
-                <HealthRow label="yfinance" ok={health.yfinance} />
-                <HealthRow label="SQLite" ok={health.sqlite} />
+                <HealthRow label="Ollama" ok={health.ollama_available} />
+                <HealthRow label="Anthropic" ok={health.anthropic_available} />
+                <HealthRow label="yfinance" ok={health.yfinance_available} />
+                <HealthRow label="SQLite" ok={health.sqlite_available} />
                 <div
                   className="mt-1 border-t pt-1.5"
                   style={{ borderColor: 'var(--color-border-subtle)' }}
@@ -146,8 +150,20 @@ export function Dashboard() {
                     >
                       Overall
                     </span>
-                    <Badge variant={health.overall ? 'bullish' : 'bearish'}>
-                      {health.overall ? 'HEALTHY' : 'DEGRADED'}
+                    <Badge
+                      variant={
+                        health.ollama_available &&
+                        health.yfinance_available &&
+                        health.sqlite_available
+                          ? 'bullish'
+                          : 'bearish'
+                      }
+                    >
+                      {health.ollama_available &&
+                      health.yfinance_available &&
+                      health.sqlite_available
+                        ? 'HEALTHY'
+                        : 'DEGRADED'}
                     </Badge>
                   </div>
                 </div>
@@ -165,7 +181,7 @@ export function Dashboard() {
             {debateError && (
               <ErrorDisplay message={debateError} onRetry={refetchDebates} />
             )}
-            {!loadingDebates && !debateError && recentDebates.length === 0 && (
+            {!loadingDebates && !debateError && rawDebates && recentDebates.length === 0 && (
               <EmptyState message="No completed debates yet." />
             )}
             {!loadingDebates &&

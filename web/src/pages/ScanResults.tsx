@@ -313,6 +313,12 @@ function useSSEWithCompletion(
   const { data } = useSSE<SSEProgressData>(`/scan/${scanId}/stream`)
   const calledRef = useRef(false)
 
+  // Reset the completion guard when the scan changes so that a new scan's
+  // onComplete callback can fire even if a previous scan already completed.
+  useEffect(() => {
+    calledRef.current = false
+  }, [scanId])
+
   useEffect(() => {
     if (data?.phase === 'complete' && !calledRef.current) {
       calledRef.current = true

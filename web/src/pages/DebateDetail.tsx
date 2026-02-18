@@ -5,7 +5,8 @@ import { BullBearMeter } from '../components/charts/BullBearMeter'
 import { DebateView, TradeThesisSection } from '../components/debate'
 import { PageShell } from '../components/layout'
 import { api } from '../api/client'
-import type { DebateResult } from '../types/debate'
+import type { DebateResult, TradeThesis } from '../types/debate'
+import { toDebateResult } from '../types/debate'
 
 /** Polling interval when debate is still running (ms) */
 const POLL_INTERVAL_MS = 3000
@@ -46,7 +47,8 @@ export function DebateDetail() {
         )
       }
 
-      const data = (await response.json()) as DebateResult
+      const raw = (await response.json()) as TradeThesis
+      const data = toDebateResult(raw, Number(id))
 
       if (!controller.signal.aborted) {
         setDebate(data)

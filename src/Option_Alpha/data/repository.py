@@ -32,10 +32,14 @@ class Repository:
     # ------------------------------------------------------------------
 
     async def save_scan_run(self, scan: ScanRun) -> None:
-        """Persist a ScanRun record."""
+        """Persist a ScanRun record.
+
+        Uses ``INSERT OR REPLACE`` so that an initial "running" row can be
+        updated to "completed" or "failed" without a separate update method.
+        """
         conn = self._db.connection
         await conn.execute(
-            "INSERT INTO scan_runs "
+            "INSERT OR REPLACE INTO scan_runs "
             "(id, started_at, completed_at, status, preset, sectors, ticker_count, top_n) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -191,6 +195,23 @@ class Repository:
             ),
         )
         await conn.commit()
+
+    async def get_thesis_raw_by_id(self, debate_id: int) -> tuple[str, str] | None:
+        """Return ``(ticker, full_thesis_json)`` for a debate by its database row ID.
+
+        Unlike :meth:`get_debate_by_id` which deserializes immediately, this
+        returns the raw ticker and JSON string so that callers (e.g. the report
+        endpoint) can build additional context before deserialization.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT ticker, full_thesis FROM ai_theses WHERE id = ?",
+            (debate_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return (str(row[0]), str(row[1]))
 
     async def get_debate_by_id(self, debate_id: int) -> TradeThesis | None:
         """Return a single AI thesis by its database row ID, or None if not found."""

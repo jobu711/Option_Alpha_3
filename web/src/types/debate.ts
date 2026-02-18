@@ -49,11 +49,12 @@ export interface TradeThesis {
 }
 
 /**
- * Full debate result returned by GET /api/debate/{id}.
+ * Full debate result used by the UI.
  *
- * The backend returns a TradeThesis directly. Agent responses
- * may be stored separately or embedded — this interface covers
- * the full display shape expected by the UI.
+ * The backend GET /api/debate/{id} and GET /api/debate return raw TradeThesis
+ * objects without wrapper metadata (id, ticker, status, agents). This interface
+ * represents the UI display shape; the API client transforms the backend
+ * response into this shape via {@link toDebateResult}.
  */
 export interface DebateResult {
   id: number
@@ -67,6 +68,37 @@ export interface DebateResult {
   }
   is_fallback: boolean
   created_at: string
+}
+
+/**
+ * Transform a raw TradeThesis from the backend into a DebateResult for the UI.
+ *
+ * The backend debate endpoints return TradeThesis directly without wrapper
+ * fields. This function infers the missing metadata:
+ * - `id`: passed explicitly (from the URL parameter or list index)
+ * - `ticker`: not available in TradeThesis; defaults to empty string
+ * - `status`: always 'completed' (only persisted theses are returned)
+ * - `agents`: not returned by the backend; set to null placeholders
+ * - `is_fallback`: inferred from model_used containing 'fallback'
+ * - `created_at`: not in TradeThesis; defaults to empty string
+ */
+export function toDebateResult(
+  thesis: TradeThesis,
+  id: number,
+): DebateResult {
+  return {
+    id,
+    ticker: '',
+    status: 'completed',
+    thesis,
+    agents: {
+      bull: null,
+      bear: null,
+      risk: null,
+    },
+    is_fallback: thesis.model_used.toLowerCase().includes('fallback'),
+    created_at: '',
+  }
 }
 
 /** Response from POST /api/debate/{ticker} */

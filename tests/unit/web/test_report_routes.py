@@ -5,7 +5,7 @@ Repository is mocked — no real database calls. Verifies that reports
 include the mandatory disclaimer.
 """
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -45,19 +45,14 @@ def _create_test_app(
 
     mock_repo = AsyncMock()
 
-    # Mock the internal database connection for the direct SQL query
-    mock_conn = AsyncMock()
-    mock_cursor = AsyncMock()
-
+    # Mock the new Repository.get_thesis_raw_by_id method that report.py now uses
     if has_row:
         t = thesis or _mock_thesis()
-        mock_cursor.fetchone = AsyncMock(return_value=(ticker, t.model_dump_json()))
+        mock_repo.get_thesis_raw_by_id = AsyncMock(
+            return_value=(ticker, t.model_dump_json()),
+        )
     else:
-        mock_cursor.fetchone = AsyncMock(return_value=None)
-
-    mock_conn.execute = AsyncMock(return_value=mock_cursor)
-    mock_repo._db = MagicMock()
-    mock_repo._db.connection = mock_conn
+        mock_repo.get_thesis_raw_by_id = AsyncMock(return_value=None)
 
     async def mock_get_repository() -> AsyncMock:  # type: ignore[type-arg]
         return mock_repo

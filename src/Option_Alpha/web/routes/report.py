@@ -36,23 +36,16 @@ async def download_report(
 
     Raises HTTP 404 if the debate_id does not match any stored thesis.
     """
-    # Fetch the thesis — the repository method searches by ticker,
-    # so we need to look up by the database row ID directly.
-    conn = repo._db.connection  # noqa: SLF001
-    cursor = await conn.execute(
-        "SELECT ticker, full_thesis FROM ai_theses WHERE id = ?",
-        (debate_id,),
-    )
-    row = await cursor.fetchone()
-
-    if row is None:
+    # Fetch the thesis — the repository provides a method that returns the
+    # raw ticker and JSON, allowing us to build report context before deserializing.
+    result = await repo.get_thesis_raw_by_id(debate_id)
+    if result is None:
         raise HTTPException(
             status_code=404,
             detail=f"Debate with id {debate_id} not found.",
         )
 
-    ticker: str = row[0]
-    full_thesis_json: str = row[1]
+    ticker, full_thesis_json = result
 
     # Deserialize the thesis
     from Option_Alpha.models.analysis import TradeThesis

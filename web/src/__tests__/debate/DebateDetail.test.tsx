@@ -1,7 +1,7 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { DebateDetail } from '../../pages/DebateDetail'
-import { sampleCompletedDebate, samplePendingDebate } from './fixtures'
+import { sampleThesis } from './fixtures'
 
 function renderWithRouter(debateId: string = '42') {
   return render(
@@ -12,6 +12,10 @@ function renderWithRouter(debateId: string = '42') {
     </MemoryRouter>,
   )
 }
+
+// The backend GET /api/debate/{id} returns a raw TradeThesis object.
+// DebateDetail transforms it into a DebateResult via toDebateResult().
+const backendThesisResponse = sampleThesis
 
 describe('DebateDetail page', () => {
   beforeEach(() => {
@@ -31,7 +35,7 @@ describe('DebateDetail page', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => sampleCompletedDebate,
+      json: async () => backendThesisResponse,
     } as Response)
 
     renderWithRouter()
@@ -43,6 +47,8 @@ describe('DebateDetail page', () => {
     expect(screen.getByTestId('verdict-direction')).toHaveTextContent(
       'BULLISH',
     )
+    // Agent cards render with null responses (awaiting) since the backend
+    // does not return individual agent responses alongside the thesis.
     expect(screen.getByTestId('agent-card-bull')).toBeInTheDocument()
     expect(screen.getByTestId('agent-card-bear')).toBeInTheDocument()
     expect(screen.getByTestId('agent-card-risk')).toBeInTheDocument()
@@ -67,21 +73,24 @@ describe('DebateDetail page', () => {
     ).toBeInTheDocument()
   })
 
-  it('shows polling indicator for running debates', async () => {
+  it('shows error for non-existent debate (pending state not stored)', async () => {
+    // The backend only stores completed theses. A running/pending debate
+    // returns 404 because it has not been persisted yet.
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
-      ok: true,
-      status: 200,
-      json: async () => samplePendingDebate,
+      ok: false,
+      status: 404,
+      statusText: 'Not Found',
+      text: async () => 'Debate 44 not found',
     } as Response)
 
     renderWithRouter('44')
 
     await waitFor(() => {
-      expect(screen.getByTestId('debate-polling')).toBeInTheDocument()
+      expect(screen.getByTestId('debate-error')).toBeInTheDocument()
     })
 
     expect(
-      screen.getByText(/Debate in progress/),
+      screen.getByText('FAILED TO LOAD DEBATE'),
     ).toBeInTheDocument()
   })
 
@@ -89,7 +98,7 @@ describe('DebateDetail page', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => sampleCompletedDebate,
+      json: async () => backendThesisResponse,
     } as Response)
 
     renderWithRouter()
@@ -103,7 +112,7 @@ describe('DebateDetail page', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => sampleCompletedDebate,
+      json: async () => backendThesisResponse,
     } as Response)
 
     renderWithRouter()
@@ -117,7 +126,7 @@ describe('DebateDetail page', () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: async () => sampleCompletedDebate,
+      json: async () => backendThesisResponse,
     } as Response)
 
     renderWithRouter()

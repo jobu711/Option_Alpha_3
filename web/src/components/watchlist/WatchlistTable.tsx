@@ -60,6 +60,8 @@ export function WatchlistTable({ tickers, onRemove, removing }: WatchlistTablePr
           {tickers.map((ticker) => (
             <tr
               key={ticker}
+              role="link"
+              tabIndex={0}
               className="cursor-pointer transition-colors"
               style={{ backgroundColor: 'transparent' }}
               onMouseEnter={(e) =>
@@ -69,6 +71,12 @@ export function WatchlistTable({ tickers, onRemove, removing }: WatchlistTablePr
                 (e.currentTarget.style.backgroundColor = 'transparent')
               }
               onClick={() => navigate(`/ticker/${ticker}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  navigate(`/ticker/${ticker}`)
+                }
+              }}
             >
               <td
                 className="font-data border-b px-2 py-1.5 text-xs font-semibold"

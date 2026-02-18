@@ -26,6 +26,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/scan", tags=["scan"])
 
+# Active scan tasks keyed by scan_id. Storing references prevents
+# fire-and-forget tasks from being garbage-collected and allows exception logging.
+_scan_tasks: dict[str, asyncio.Task[None]] = {}
+
 # ---------------------------------------------------------------------------
 # Request / response models (web-layer input schemas)
 # ---------------------------------------------------------------------------
@@ -349,11 +353,24 @@ async def start_scan(
         top_n=request.top_n,
     )
 
+    # Persist the initial "running" state so GET /scan/{id} works immediately
+    await repo.save_scan_run(scan_run)
+
     # Create SSE progress queue
     _scan_progress[scan_id] = asyncio.Queue()
 
-    # Launch pipeline as background task
-    asyncio.create_task(_run_scan_pipeline(scan_id, request, repo))
+    # Launch pipeline as background task with reference tracking
+    task = asyncio.create_task(_run_scan_pipeline(scan_id, request, repo))
+    _scan_tasks[scan_id] = task
+
+    def _on_scan_done(t: asyncio.Task[None], *, _scan_id: str = scan_id) -> None:
+        """Clean up task reference and log any unhandled exception."""
+        _scan_tasks.pop(_scan_id, None)
+        exc = t.exception() if not t.cancelled() else None
+        if exc is not None:
+            logger.error("Scan task %s failed: %s", _scan_id, exc)
+
+    task.add_done_callback(_on_scan_done)
 
     logger.info("Scan %s started", scan_id)
     return scan_run

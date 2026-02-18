@@ -1,4 +1,6 @@
-import type { DebateResult, DebateStarted } from '../types/debate'
+import type { DebateStarted, TradeThesis } from '../types/debate'
+import { toDebateResult } from '../types/debate'
+import type { DebateResult } from '../types/debate'
 
 const BASE_URL = '/api'
 
@@ -140,12 +142,12 @@ export interface WebSettings {
 }
 
 export interface HealthStatus {
-  ollama: boolean
-  anthropic: boolean
-  yfinance: boolean
-  sqlite: boolean
-  overall: boolean
-  checked_at: string
+  ollama_available: boolean
+  anthropic_available: boolean
+  yfinance_available: boolean
+  sqlite_available: boolean
+  ollama_models: string[]
+  last_check: string
 }
 
 export const api = {
@@ -160,8 +162,14 @@ export const api = {
 
   debate: {
     start: (ticker: string) => post<DebateStarted>(`/debate/${ticker}`),
-    get: (id: string) => get<DebateResult>(`/debate/${id}`),
-    list: () => get<DebateResult[]>('/debate'),
+    get: async (id: string): Promise<DebateResult> => {
+      const thesis = await get<TradeThesis>(`/debate/${id}`)
+      return toDebateResult(thesis, Number(id))
+    },
+    list: async (): Promise<DebateResult[]> => {
+      const theses = await get<TradeThesis[]>('/debate')
+      return theses.map((t, i) => toDebateResult(t, i))
+    },
   },
 
   ticker: {

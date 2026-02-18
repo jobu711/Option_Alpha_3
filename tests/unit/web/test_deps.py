@@ -11,9 +11,11 @@ from fastapi import HTTPException
 
 from Option_Alpha.data.database import Database
 from Option_Alpha.data.repository import Repository
+from Option_Alpha.services.cache import ServiceCache
 from Option_Alpha.services.health import HealthService
 from Option_Alpha.services.market_data import MarketDataService
 from Option_Alpha.services.options_data import OptionsDataService
+from Option_Alpha.services.rate_limiter import RateLimiter
 from Option_Alpha.web.deps import (
     get_database,
     get_health_service,
@@ -50,13 +52,22 @@ class TestGetRepository:
         assert isinstance(repo, Repository)
 
 
+def _mock_request_with_state() -> MagicMock:
+    """Create a mock Request with app.state.rate_limiter and app.state.cache set."""
+    mock_request = MagicMock()
+    mock_request.app.state.rate_limiter = RateLimiter()
+    mock_request.app.state.cache = ServiceCache()
+    return mock_request
+
+
 class TestGetMarketDataService:
     """Test the get_market_data_service dependency."""
 
     @pytest.mark.asyncio
     async def test_returns_market_data_service(self) -> None:
         """get_market_data_service should return a MarketDataService instance."""
-        service = await get_market_data_service()
+        mock_request = _mock_request_with_state()
+        service = await get_market_data_service(mock_request)
         assert isinstance(service, MarketDataService)
 
 
@@ -66,7 +77,8 @@ class TestGetOptionsDataService:
     @pytest.mark.asyncio
     async def test_returns_options_data_service(self) -> None:
         """get_options_data_service should return an OptionsDataService instance."""
-        service = await get_options_data_service()
+        mock_request = _mock_request_with_state()
+        service = await get_options_data_service(mock_request)
         assert isinstance(service, OptionsDataService)
 
 
