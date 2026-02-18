@@ -10,14 +10,7 @@
 INPUT=$(cat)
 
 # Extract the command using Python (jq not available on this system)
-COMMAND=$(python3 -c "
-import json, sys
-try:
-    data = json.loads(sys.stdin.read())
-    print(data.get('tool_input', {}).get('command', ''))
-except Exception:
-    print('')
-" <<< "$INPUT" 2>/dev/null || python -c "
+COMMAND=$(python -c "
 import json, sys
 try:
     data = json.loads(sys.stdin.read())

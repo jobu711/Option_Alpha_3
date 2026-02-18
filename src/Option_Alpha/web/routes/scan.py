@@ -118,40 +118,82 @@ async def _run_scan_pipeline(
         # Phase 1: determine tickers and fetch OHLCV
         if request.tickers:
             ticker_symbols = [t.upper().strip() for t in request.tickers]
+            logger.info(
+                "Scan %s | Phase 1/5 UNIVERSE | %d tickers from request: %s",
+                scan_id[:8],
+                len(ticker_symbols),
+                ", ".join(ticker_symbols),
+            )
         else:
             from Option_Alpha.services import UniverseService
 
             universe_service = UniverseService(cache=cache, rate_limiter=rate_limiter)
             try:
+                logger.info("Scan %s | Phase 1/5 UNIVERSE | Loading full universe...", scan_id[:8])
                 universe = await universe_service.get_universe(preset="full")
                 if not universe:
+                    logger.info(
+                        "Scan %s | Phase 1/5 UNIVERSE | Cache empty, refreshing...", scan_id[:8]
+                    )
                     universe = await universe_service.refresh()
                     universe = await universe_service.get_universe(preset="full")
                 ticker_symbols = [t.symbol for t in universe]
+                logger.info(
+                    "Scan %s | Phase 1/5 UNIVERSE | %d tickers loaded",
+                    scan_id[:8],
+                    len(ticker_symbols),
+                )
             finally:
                 await universe_service.aclose()
 
         total_tickers = len(ticker_symbols)
         _emit_progress(scan_id, "fetch_prices", 0, total_tickers)
 
+        logger.info(
+            "Scan %s | Phase 2/5 FETCH    | Fetching OHLCV for %d tickers...",
+            scan_id[:8],
+            total_tickers,
+        )
         batch_results = await market_service.fetch_batch_ohlcv(ticker_symbols)
 
         ohlcv_data: dict[str, list[OHLCV]] = {}
+        failed_tickers: list[str] = []
         for ticker_sym, result in batch_results.items():
             if not isinstance(result, Exception):
                 ohlcv_data[ticker_sym] = result
+            else:
+                failed_tickers.append(ticker_sym)
 
         _emit_progress(scan_id, "fetch_prices", total_tickers, total_tickers)
 
+        logger.info(
+            "Scan %s | Phase 2/5 FETCH    | %d succeeded, %d failed",
+            scan_id[:8],
+            len(ohlcv_data),
+            len(failed_tickers),
+        )
+        if failed_tickers:
+            logger.warning(
+                "Scan %s | Phase 2/5 FETCH    | Failed: %s",
+                scan_id[:8],
+                ", ".join(failed_tickers[:20]),
+            )
+
         if not ohlcv_data:
-            logger.warning("Scan %s: no OHLCV data retrieved, aborting", scan_id)
+            logger.warning("Scan %s: no OHLCV data retrieved, aborting", scan_id[:8])
             await _finalize_scan(repo, scan_id, started_at, "failed", 0, request.top_n)
             return
 
-        # Phase 2: compute indicators and score
+        # Phase 3: compute indicators and score
+        logger.info(
+            "Scan %s | Phase 3/5 INDICATE | Computing indicators for %d tickers...",
+            scan_id[:8],
+            len(ohlcv_data),
+        )
         _emit_progress(scan_id, "compute_indicators", 0, len(ohlcv_data))
 
         universe_indicators: dict[str, dict[str, float]] = {}
+        indicator_failures = 0
 
         for idx, (ticker_sym, bars) in enumerate(ohlcv_data.items(), start=1):
             try:
@@ -221,20 +263,41 @@ async def _run_scan_pipeline(
                 if indicators:
                     universe_indicators[ticker_sym] = indicators
             except Exception as exc:  # noqa: BLE001
-                logger.warning("Indicator computation failed for %s: %s", ticker_sym, exc)
+                indicator_failures += 1
+                logger.warning("Scan %s | INDICATE | %s failed: %s", scan_id[:8], ticker_sym, exc)
 
+            if idx % 50 == 0 or idx == len(ohlcv_data):
+                logger.info(
+                    "Scan %s | Phase 3/5 INDICATE | %d/%d tickers processed",
+                    scan_id[:8],
+                    idx,
+                    len(ohlcv_data),
+                )
             _emit_progress(scan_id, "compute_indicators", idx, len(ohlcv_data))
 
+        logger.info(
+            "Scan %s | Phase 3/5 INDICATE | Done — %d with indicators, %d failed",
+            scan_id[:8],
+            len(universe_indicators),
+            indicator_failures,
+        )
+
         if not universe_indicators:
-            logger.warning("Scan %s: no indicators computed, aborting", scan_id)
+            logger.warning("Scan %s: no indicators computed, aborting", scan_id[:8])
             await _finalize_scan(repo, scan_id, started_at, "failed", 0, request.top_n)
             return
 
         # Score universe
+        logger.info(
+            "Scan %s | Phase 4/5 SCORING  | Scoring %d tickers...",
+            scan_id[:8],
+            len(universe_indicators),
+        )
         scored_tickers = score_universe(universe_indicators)
         _emit_progress(scan_id, "scoring", len(scored_tickers), len(scored_tickers))
 
-        # Phase 3: catalyst adjustment
+        # Phase 4b: catalyst adjustment
+        logger.info("Scan %s | Phase 4/5 CATALYST | Applying catalyst adjustments...", scan_id[:8])
         _emit_progress(scan_id, "catalysts", 0, len(scored_tickers))
         today = datetime.date.today()
         try:
@@ -264,8 +327,15 @@ async def _run_scan_pipeline(
             logger.warning("Catalyst scoring failed (continuing): %s", exc)
 
         _emit_progress(scan_id, "catalysts", len(scored_tickers), len(scored_tickers))
+        logger.info("Scan %s | Phase 4/5 CATALYST | Done", scan_id[:8])
 
         # Phase 5: persist
+        logger.info(
+            "Scan %s | Phase 5/5 PERSIST  | Saving top %d of %d scored tickers...",
+            scan_id[:8],
+            min(request.top_n, len(scored_tickers)),
+            len(scored_tickers),
+        )
         _emit_progress(scan_id, "persisting", 0, 1)
 
         completed_at = datetime.datetime.now(datetime.UTC)
@@ -286,14 +356,30 @@ async def _run_scan_pipeline(
         _emit_progress(scan_id, "persisting", 1, 1)
         _emit_progress(scan_id, "complete", 1, 1)
 
-        logger.info("Scan %s completed: %d tickers scored", scan_id, len(scored_tickers))
+        elapsed = (completed_at - started_at).total_seconds()
+        logger.info(
+            "Scan %s | COMPLETE | %d tickers scored, top %d saved (%.1fs elapsed)",
+            scan_id[:8],
+            len(scored_tickers),
+            min(request.top_n, len(scored_tickers)),
+            elapsed,
+        )
+        # Log the top results
+        for ts in scored_tickers[: request.top_n]:
+            logger.info(
+                "Scan %s |  #%-3d %s  score=%.4f",
+                scan_id[:8],
+                ts.rank,
+                ts.ticker.ljust(5),
+                ts.score,
+            )
 
     except Exception:
-        logger.exception("Scan %s failed with unexpected error", scan_id)
+        logger.exception("Scan %s | FAILED   | Unexpected error", scan_id[:8])
         try:
             await _finalize_scan(repo, scan_id, started_at, "failed", 0, request.top_n)
-        except Exception:  # noqa: BLE001
-            logger.exception("Failed to persist failed scan run %s", scan_id)
+        except Exception:
+            logger.exception("Scan %s | FAILED   | Could not persist failure record", scan_id[:8])
     finally:
         # Signal SSE consumers that the stream is done
         queue = _scan_progress.get(scan_id)
@@ -372,7 +458,13 @@ async def start_scan(
 
     task.add_done_callback(_on_scan_done)
 
-    logger.info("Scan %s started", scan_id)
+    tickers_desc = ", ".join(request.tickers) if request.tickers else "full universe"
+    logger.info(
+        "Scan %s | STARTED  | top_n=%d, tickers=%s",
+        scan_id[:8],
+        request.top_n,
+        tickers_desc,
+    )
     return scan_run
 
 
