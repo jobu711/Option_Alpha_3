@@ -378,7 +378,7 @@ async def _run_scan_pipeline(
         logger.exception("Scan %s | FAILED   | Unexpected error", scan_id[:8])
         try:
             await _finalize_scan(repo, scan_id, started_at, "failed", 0, request.top_n)
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("Scan %s | FAILED   | Could not persist failure record", scan_id[:8])
     finally:
         # Signal SSE consumers that the stream is done
