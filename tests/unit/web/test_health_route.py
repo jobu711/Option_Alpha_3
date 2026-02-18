@@ -54,7 +54,7 @@ class TestHealthEndpoint:
         app = _create_test_app()
         transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/health")
+            response = await client.get("/api/health")
         assert response.status_code == 200
 
     @pytest.mark.asyncio
@@ -63,7 +63,7 @@ class TestHealthEndpoint:
         app = _create_test_app()
         transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/health")
+            response = await client.get("/api/health")
 
         body = response.json()
         assert "ollama_available" in body
@@ -79,7 +79,7 @@ class TestHealthEndpoint:
         app = _create_test_app()
         transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/health")
+            response = await client.get("/api/health")
 
         body = response.json()
         assert body["ollama_available"] is True
@@ -94,7 +94,7 @@ class TestHealthEndpoint:
         app = _create_test_app()
         transport = httpx.ASGITransport(app=app)  # type: ignore[arg-type]
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/health")
+            response = await client.get("/api/health")
 
         # Validate the response body round-trips through the Pydantic model
         status = HealthStatus.model_validate(response.json())
@@ -109,7 +109,7 @@ class TestHealthEndpoint:
         health_routes = [
             route
             for route in app.routes
-            if hasattr(route, "path") and route.path == "/health"  # type: ignore[union-attr]
+            if hasattr(route, "path") and route.path == "/api/health"  # type: ignore[union-attr]
         ]
         assert len(health_routes) == 1
         route = health_routes[0]

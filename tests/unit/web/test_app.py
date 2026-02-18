@@ -54,10 +54,10 @@ class TestCreateApp:
         assert "http://localhost:8000" in origins
 
     def test_health_route_registered(self) -> None:
-        """The /health route should be registered."""
+        """The /api/health route should be registered."""
         app = create_app()
         route_paths = [route.path for route in app.routes]  # type: ignore[union-attr]
-        assert "/health" in route_paths
+        assert "/api/health" in route_paths
 
     def test_exception_handlers_registered(self) -> None:
         """Domain exception handlers should be registered."""
