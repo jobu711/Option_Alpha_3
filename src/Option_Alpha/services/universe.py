@@ -14,6 +14,7 @@ import datetime
 import io
 import json
 import logging
+import re
 from typing import Final
 
 import httpx
@@ -49,6 +50,77 @@ UNIVERSE_CACHE_TTL: Final[int] = 24 * 60 * 60  # 24 hours
 
 # HTTP timeout for CBOE download
 CBOE_FETCH_TIMEOUT: Final[float] = 30.0
+
+# S&P 500 constituent list from Wikipedia
+_SP500_WIKI_URL: Final[str] = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
+_SP500_CACHE_KEY: Final[str] = "wiki:sp500:constituents"
+_SP500_CACHE_TTL: Final[int] = 7 * 24 * 60 * 60  # 7 days
+_SP500_MIN_EXPECTED: Final[int] = 400  # sanity check — S&P 500 should have ~503
+
+# Fallback large-cap set used when Wikipedia is unreachable
+_FALLBACK_LARGE_CAPS: Final[frozenset[str]] = frozenset(
+    {
+        "AAPL",
+        "ABBV",
+        "ABT",
+        "ACN",
+        "ADP",
+        "ADI",
+        "AMGN",
+        "AMD",
+        "AMZN",
+        "AVGO",
+        "BA",
+        "BLK",
+        "BKNG",
+        "CAT",
+        "COST",
+        "CRM",
+        "CSCO",
+        "CVX",
+        "DE",
+        "DHR",
+        "DIS",
+        "GE",
+        "GOOG",
+        "GOOGL",
+        "GS",
+        "HD",
+        "HON",
+        "IBM",
+        "INTC",
+        "ISRG",
+        "JNJ",
+        "JPM",
+        "KO",
+        "LIN",
+        "LLY",
+        "LOW",
+        "MA",
+        "MCD",
+        "MDLZ",
+        "MRK",
+        "META",
+        "MSFT",
+        "NEE",
+        "NFLX",
+        "NVDA",
+        "ORCL",
+        "PEP",
+        "PG",
+        "PM",
+        "RTX",
+        "SPGI",
+        "SYK",
+        "TMO",
+        "TSLA",
+        "TXN",
+        "UNH",
+        "UNP",
+        "V",
+        "WMT",
+    }
+)
 
 # GICS sector names (11 standard sectors)
 GICS_SECTORS: Final[list[str]] = [
@@ -100,6 +172,7 @@ class UniverseService:
         self._rate_limiter = rate_limiter
         self._universe: list[TickerInfo] = []
         self._miss_counts: dict[str, int] = {}
+        self._sp500_symbols: set[str] = set()
         self._client = httpx.AsyncClient(
             timeout=httpx.Timeout(connect=5.0, read=30.0, write=10.0, pool=5.0),
             limits=httpx.Limits(max_connections=10, max_keepalive_connections=5),
@@ -121,6 +194,9 @@ class UniverseService:
             DataSourceUnavailableError: If CBOE is unreachable or returns
                 fewer than MIN_TICKERS_SAFETY tickers (likely broken source).
         """
+        # Fetch S&P 500 constituents for market cap classification
+        self._sp500_symbols = await self._fetch_sp500_constituents()
+
         csv_text = await self._fetch_cboe_csv()
         raw_tickers = self._parse_csv(csv_text)
 
@@ -418,88 +494,114 @@ class UniverseService:
 
         return "equity"
 
-    @staticmethod
-    def _classify_market_cap_tier(symbol: str, asset_type: str) -> str:
-        """Classify market cap tier with a heuristic approach.
+    def _classify_market_cap_tier(self, symbol: str, asset_type: str) -> str:
+        """Classify market cap tier using S&P 500 constituent data.
 
-        Without real-time market data, this uses well-known symbol lists
-        as a best-effort classification. The tier can be refined later
-        when actual market data is fetched.
+        Uses the dynamically-fetched S&P 500 list from Wikipedia when
+        available, falling back to ``_FALLBACK_LARGE_CAPS`` if the list
+        has not been loaded yet.
         """
         if asset_type == "etf":
             return "etf"
 
-        # Well-known large cap tickers (subset of S&P 500)
-        large_caps = {
-            "AAPL",
-            "MSFT",
-            "AMZN",
-            "NVDA",
-            "GOOGL",
-            "GOOG",
-            "META",
-            "BRK",
-            "UNH",
-            "JNJ",
-            "JPM",
-            "V",
-            "PG",
-            "XOM",
-            "MA",
-            "HD",
-            "CVX",
-            "MRK",
-            "ABBV",
-            "LLY",
-            "PEP",
-            "KO",
-            "AVGO",
-            "COST",
-            "TMO",
-            "MCD",
-            "WMT",
-            "CSCO",
-            "ACN",
-            "ABT",
-            "DHR",
-            "NEE",
-            "LIN",
-            "TXN",
-            "PM",
-            "UNP",
-            "RTX",
-            "LOW",
-            "HON",
-            "AMGN",
-            "IBM",
-            "GE",
-            "CAT",
-            "BA",
-            "GS",
-            "SPGI",
-            "DE",
-            "SYK",
-            "BLK",
-            "MDLZ",
-            "ADP",
-            "ADI",
-            "ISRG",
-            "BKNG",
-            "TSLA",
-            "AMD",
-            "CRM",
-            "NFLX",
-            "ORCL",
-            "INTC",
-            "DIS",
-        }
-
+        large_caps = self._sp500_symbols if self._sp500_symbols else _FALLBACK_LARGE_CAPS
         if symbol in large_caps:
             return "large_cap"
 
-        # Default to mid_cap; actual classification should be refined
-        # by market data enrichment later
         return "mid_cap"
+
+    async def _fetch_sp500_constituents(self) -> set[str]:
+        """Fetch the current S&P 500 constituent list from Wikipedia.
+
+        Parses the first table on the *List of S&P 500 companies* page to
+        extract ticker symbols.  Falls back to ``_FALLBACK_LARGE_CAPS`` if
+        the fetch fails or the parsed count is suspiciously low.
+        """
+        # Try cache first
+        cached = await self._cache.get(_SP500_CACHE_KEY)
+        if cached is not None:
+            symbols: set[str] = set(json.loads(cached))
+            if len(symbols) >= _SP500_MIN_EXPECTED:
+                logger.info("S&P 500 list loaded from cache: %d symbols.", len(symbols))
+                return symbols
+
+        try:
+            # Wikipedia requires a descriptive User-Agent per their API
+            # policy: https://meta.wikimedia.org/wiki/User-Agent_policy
+            headers = {
+                "User-Agent": (
+                    "OptionAlpha/1.0 "
+                    "(https://github.com/jobu711/Option_Alpha_3; "
+                    "options analysis tool) "
+                    "Python/httpx"
+                ),
+                "Accept": "text/html",
+            }
+            response = await asyncio.wait_for(
+                self._client.get(_SP500_WIKI_URL, headers=headers),
+                timeout=30.0,
+            )
+            if response.status_code != 200:  # noqa: PLR2004
+                logger.warning(
+                    "Wikipedia returned HTTP %d for S&P 500 page.", response.status_code
+                )
+                return set(_FALLBACK_LARGE_CAPS)
+
+            html = response.text
+
+            # The constituents table uses external links to NYSE/NASDAQ:
+            #   <td><a rel="nofollow" class="external text"
+            #        href="https://www.nyse.com/quote/XNYS:MMM">MMM</a>
+            # Tickers are 1-5 uppercase letters, optionally with a dot for
+            # share classes (e.g. BRK.B).
+            matches = re.findall(
+                r'<td[^>]*>\s*<a[^>]*class="external text"[^>]*>'
+                r"([A-Z]{1,5}(?:\.[A-Z])?)</a>",
+                html,
+            )
+
+            if len(matches) < _SP500_MIN_EXPECTED:
+                logger.warning(
+                    "Only parsed %d tickers from Wikipedia (expected %d+). Using fallback.",
+                    len(matches),
+                    _SP500_MIN_EXPECTED,
+                )
+                return set(_FALLBACK_LARGE_CAPS)
+
+            # Normalize: strip dot suffix (BRK.B -> BRK) to match CBOE symbols
+            symbols = {s.split(".")[0] for s in matches}
+            logger.info("Fetched %d S&P 500 constituents from Wikipedia.", len(symbols))
+
+            # Cache for reuse across sessions
+            await self._cache_sp500(symbols)
+
+            return symbols
+
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Failed to fetch S&P 500 list: %s. Using fallback.", exc)
+            return set(_FALLBACK_LARGE_CAPS)
+
+    async def _cache_sp500(self, symbols: set[str]) -> None:
+        """Persist the S&P 500 symbol set to cache."""
+        serialized = json.dumps(sorted(symbols))
+        await self._cache.set(_SP500_CACHE_KEY, serialized, _SP500_CACHE_TTL)
+        logger.debug("S&P 500 list cached: %d symbols.", len(symbols))
+
+    async def _load_sp500_from_cache(self) -> None:
+        """Load the S&P 500 symbol set from cache if available."""
+        cached = await self._cache.get(_SP500_CACHE_KEY)
+        if cached is None:
+            logger.debug("No cached S&P 500 list found, using fallback.")
+            self._sp500_symbols = set(_FALLBACK_LARGE_CAPS)
+            return
+
+        symbols: set[str] = set(json.loads(cached))
+        if len(symbols) >= _SP500_MIN_EXPECTED:
+            self._sp500_symbols = symbols
+            logger.info("S&P 500 list loaded from cache: %d symbols.", len(symbols))
+        else:
+            logger.warning("Cached S&P 500 list too small (%d), using fallback.", len(symbols))
+            self._sp500_symbols = set(_FALLBACK_LARGE_CAPS)
 
     async def _cache_universe(self, tickers: list[TickerInfo]) -> None:
         """Serialize the universe to cache."""
@@ -508,7 +610,11 @@ class UniverseService:
         logger.debug("Universe cached: %d tickers.", len(tickers))
 
     async def _load_from_cache(self) -> None:
-        """Load the universe from cache if available."""
+        """Load the universe and SP500 constituents from cache if available."""
+        # Load SP500 list from cache if not already populated
+        if not self._sp500_symbols:
+            await self._load_sp500_from_cache()
+
         cached = await self._cache.get(UNIVERSE_CACHE_KEY)
         if cached is None:
             logger.debug("No cached universe found.")
