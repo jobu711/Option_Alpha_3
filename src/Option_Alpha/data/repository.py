@@ -32,10 +32,14 @@ class Repository:
     # ------------------------------------------------------------------
 
     async def save_scan_run(self, scan: ScanRun) -> None:
-        """Persist a ScanRun record."""
+        """Persist a ScanRun record.
+
+        Uses ``INSERT OR REPLACE`` so that an initial "running" row can be
+        updated to "completed" or "failed" without a separate update method.
+        """
         conn = self._db.connection
         await conn.execute(
-            "INSERT INTO scan_runs "
+            "INSERT OR REPLACE INTO scan_runs "
             "(id, started_at, completed_at, status, preset, sectors, ticker_count, top_n) "
             "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             (
@@ -102,6 +106,17 @@ class Repository:
         if row is None:
             return None
         return _row_to_scan_run(row)
+
+    async def list_scan_runs(self, *, limit: int = 20, offset: int = 0) -> list[ScanRun]:
+        """Return scan runs ordered by most recent, with pagination."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT id, started_at, completed_at, status, preset, sectors, "
+            "ticker_count, top_n FROM scan_runs ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        rows = await cursor.fetchall()
+        return [_row_to_scan_run(row) for row in rows]
 
     async def get_scores_for_scan(self, scan_run_id: str) -> list[TickerScore]:
         """Return all TickerScores for a given scan run, ordered by rank."""
@@ -180,6 +195,45 @@ class Repository:
             ),
         )
         await conn.commit()
+
+    async def get_thesis_raw_by_id(self, debate_id: int) -> tuple[str, str] | None:
+        """Return ``(ticker, full_thesis_json)`` for a debate by its database row ID.
+
+        Unlike :meth:`get_debate_by_id` which deserializes immediately, this
+        returns the raw ticker and JSON string so that callers (e.g. the report
+        endpoint) can build additional context before deserialization.
+        """
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT ticker, full_thesis FROM ai_theses WHERE id = ?",
+            (debate_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return (str(row[0]), str(row[1]))
+
+    async def get_debate_by_id(self, debate_id: int) -> TradeThesis | None:
+        """Return a single AI thesis by its database row ID, or None if not found."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT full_thesis FROM ai_theses WHERE id = ?",
+            (debate_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return TradeThesis.model_validate_json(row[0])
+
+    async def list_debates(self, *, limit: int = 20, offset: int = 0) -> list[TradeThesis]:
+        """Return recent AI theses across all tickers, with pagination."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT full_thesis FROM ai_theses ORDER BY timestamp DESC LIMIT ? OFFSET ?",
+            (limit, offset),
+        )
+        rows = await cursor.fetchall()
+        return [TradeThesis.model_validate_json(row[0]) for row in rows]
 
     async def get_debate_history(
         self,
