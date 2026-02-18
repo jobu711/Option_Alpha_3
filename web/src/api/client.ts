@@ -70,9 +70,12 @@ export const api = {
   },
 
   debate: {
-    start: (params: unknown) => post<unknown>('/debate', params),
-    get: (id: string) => get<unknown>(`/debate/${id}`),
-    list: () => get<unknown[]>('/debate'),
+    start: (ticker: string) =>
+      post<import('../types/debate').DebateStarted>(`/debate/${ticker}`),
+    get: (id: string) =>
+      get<import('../types/debate').DebateResult>(`/debate/${id}`),
+    list: () =>
+      get<import('../types/debate').DebateResult[]>('/debate'),
   },
 
   ticker: {
