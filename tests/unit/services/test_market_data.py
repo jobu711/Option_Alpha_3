@@ -61,15 +61,15 @@ def service(rate_limiter: RateLimiter, cache: ServiceCache) -> MarketDataService
 
 @pytest.fixture()
 def valid_ohlcv_df() -> pd.DataFrame:
-    """A valid OHLCV DataFrame with enough rows (200+)."""
-    dates = pd.date_range("2024-01-01", periods=200, freq="B", tz="US/Eastern")
+    """A valid OHLCV DataFrame with enough rows (500 — realistic 2y data)."""
+    dates = pd.date_range("2023-01-01", periods=500, freq="B", tz="US/Eastern")
     return pd.DataFrame(
         {
-            "Open": [150.0 + i * 0.1 for i in range(200)],
-            "High": [151.0 + i * 0.1 for i in range(200)],
-            "Low": [149.0 + i * 0.1 for i in range(200)],
-            "Close": [150.5 + i * 0.1 for i in range(200)],
-            "Volume": [50_000_000 + i * 1000 for i in range(200)],
+            "Open": [150.0 + i * 0.1 for i in range(500)],
+            "High": [151.0 + i * 0.1 for i in range(500)],
+            "Low": [149.0 + i * 0.1 for i in range(500)],
+            "Close": [150.5 + i * 0.1 for i in range(500)],
+            "Volume": [50_000_000 + i * 1000 for i in range(500)],
         },
         index=dates,
     )
@@ -116,7 +116,7 @@ class TestFetchOHLCV:
         ):
             bars = await service.fetch_ohlcv("AAPL")
 
-        assert len(bars) == 200
+        assert len(bars) == 500
         assert all(isinstance(b, OHLCV) for b in bars)
         assert bars[0].open == safe_decimal(valid_ohlcv_df.iloc[0]["Open"])
 
@@ -220,7 +220,7 @@ class TestFetchOHLCV:
         ):
             bars = await service.fetch_ohlcv("  aapl  ")
 
-        assert len(bars) == 200
+        assert len(bars) == 500
 
 
 # ---------------------------------------------------------------------------
@@ -354,7 +354,7 @@ class TestFetchBatchOHLCV:
         """Batch returns successes and wraps failures individually."""
 
         # AAPL succeeds, FAKE fails
-        async def mock_fetch(ticker: str, period: str = "1y") -> pd.DataFrame:
+        async def mock_fetch(ticker: str, period: str = "2y") -> pd.DataFrame:
             if ticker == "FAKE":
                 raise TickerNotFoundError("not found", ticker="FAKE", source="yfinance")
             return valid_ohlcv_df

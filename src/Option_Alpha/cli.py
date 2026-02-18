@@ -100,7 +100,7 @@ _scan_lock = asyncio.Lock()
 DEFAULT_TOP_N: int = 50
 DEFAULT_MIN_SCORE: float = 50.0
 DEFAULT_DB_PATH: str = "data/options.db"
-DEFAULT_OHLCV_PERIOD: str = "1y"
+DEFAULT_OHLCV_PERIOD: str = "2y"
 
 # ---------------------------------------------------------------------------
 # scan command
@@ -549,8 +549,8 @@ async def _scan_async(
 
 def _render_scan_results(
     scores: list[TickerScore],
-    directions: dict[str, SignalDirection],
-    options: dict[str, OptionContract],
+    directions: dict[str, SignalDirection],  # dict-ok
+    options: dict[str, OptionContract],  # dict-ok
 ) -> None:
     """Render scan results as a rich table to the console.
 

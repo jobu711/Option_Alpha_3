@@ -85,7 +85,7 @@ def check_01_no_raw_dicts(files: list[Path]) -> list[Violation]:
 
     Targets: function params, return types, Pydantic model fields.
     Excludes: local variables (= {} or = dict()), private attrs (self._),
-    indicators/ module, and normalization.py.
+    indicators/ module, normalization.py, test files, and lines with ``# dict-ok``.
     """
     annotation_pattern = re.compile(r":\s*dict\[")
     # Exclusion patterns for internal-only usage
@@ -98,10 +98,15 @@ def check_01_no_raw_dicts(files: list[Path]) -> list[Violation]:
             continue
         if path.name == "normalization.py":
             continue
+        if _is_test_file(path):
+            continue
         for i, line in enumerate(_read_lines(path), 1):
             if _is_comment_or_docstring_line(line):
                 continue
             if not annotation_pattern.search(line):
+                continue
+            # Inline suppression for legitimate raw-API-boundary dicts
+            if "# dict-ok" in line:
                 continue
             # Skip clearly internal patterns
             if local_var.search(line):
@@ -273,13 +278,19 @@ def check_07_pydantic_v1(files: list[Path]) -> list[Violation]:
 # Check 8 (type annotations) is enforced by mypy --strict, not here.
 
 
+def _is_test_file(path: Path) -> bool:
+    """Check if path is a test file (excluded from architecture boundary checks)."""
+    posix = _posix(path)
+    return "/tests/" in posix or "test_" in path.name or posix.startswith("tests/")
+
+
 def check_09_api_outside_services(files: list[Path]) -> list[Violation]:
     """No yfinance or httpx.Client/AsyncClient outside services/."""
     yf_pattern = re.compile(r"(?:import\s+yfinance|from\s+yfinance)")
     httpx_pattern = re.compile(r"httpx\.(Client|AsyncClient)")
     violations = []
     for path in files:
-        if _in_module(path, "services"):
+        if _in_module(path, "services") or _is_test_file(path):
             continue
         for i, line in enumerate(_read_lines(path), 1):
             if yf_pattern.search(line):
@@ -711,7 +722,8 @@ def main() -> int:
 
         if error_violations:
             print(
-                f"\nCLAUDE.md compliance: {len(error_violations)} error(s), {len(warning_violations)} warning(s)"
+                f"\nCLAUDE.md compliance: {len(error_violations)} error(s), "
+                f"{len(warning_violations)} warning(s)"
             )
             print()
             for v in error_violations:

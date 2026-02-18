@@ -44,10 +44,10 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-DEFAULT_PERIOD: Final[str] = "1y"
+DEFAULT_PERIOD: Final[str] = "2y"
 
-# Minimum rows required for a valid OHLCV fetch (~200 trading days/year)
-MIN_OHLCV_ROWS: Final[int] = 100
+# Minimum rows required for SMA 200 (need at least 200 trading days)
+MIN_OHLCV_ROWS: Final[int] = 200
 
 # yfinance column name mapping (yfinance returns title-cased columns)
 OHLCV_COLUMN_MAP: Final[dict[str, str]] = {
@@ -60,6 +60,7 @@ OHLCV_COLUMN_MAP: Final[dict[str, str]] = {
 
 # Expected calendar days for each yfinance period string
 PERIOD_EXPECTED_DAYS: Final[dict[str, int]] = {
+    "2y": 730,
     "1y": 365,
     "6mo": 183,
     "3mo": 91,
@@ -111,7 +112,7 @@ class MarketDataService:
 
         Args:
             ticker: Ticker symbol (e.g., ``"AAPL"``).
-            period: yfinance period string (default ``"1y"``).
+            period: yfinance period string (default ``"2y"``).
 
         Returns:
             List of ``OHLCV`` models sorted chronologically.
@@ -339,12 +340,12 @@ class MarketDataService:
             timeout=EXTERNAL_CALL_TIMEOUT_SECONDS,
         )
 
-    async def _fetch_raw_info(self, ticker: str) -> dict[str, object]:
+    async def _fetch_raw_info(self, ticker: str) -> dict[str, object]:  # dict-ok
         """Fetch the raw info dict from yfinance in a thread."""
 
-        def _sync_fetch() -> dict[str, object]:
+        def _sync_fetch() -> dict[str, object]:  # dict-ok
             t = yf.Ticker(ticker)
-            info: dict[str, object] = t.info
+            info: dict[str, object] = t.info  # dict-ok
             return info
 
         return await asyncio.wait_for(
@@ -407,7 +408,7 @@ class MarketDataService:
                 )
 
     @staticmethod
-    def _validate_info_dict(info: dict[str, object], ticker: str) -> None:
+    def _validate_info_dict(info: dict[str, object], ticker: str) -> None:  # dict-ok
         """Validate that the info dict represents a real ticker."""
         if not info:
             raise TickerNotFoundError(
