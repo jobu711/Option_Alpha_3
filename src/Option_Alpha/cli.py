@@ -245,7 +245,7 @@ async def _scan_async(
                 console.print(f"  Loaded {len(ticker_symbols)} tickers")
 
                 with Progress(
-                    SpinnerColumn(),
+                    SpinnerColumn(spinner_name="line"),
                     TextColumn("[progress.description]{task.description}"),
                     console=console,
                 ) as progress:
@@ -742,7 +742,7 @@ async def _debate_async(
         console.print("[bold]Running AI debate (Bull -> Bear -> Risk)...[/bold]")
 
         with Progress(
-            SpinnerColumn(),
+            SpinnerColumn(spinner_name="line"),
             TextColumn("[progress.description]{task.description}"),
             console=console,
         ) as progress:
@@ -1056,7 +1056,7 @@ async def _universe_refresh_async() -> None:
         try:
             console.print("[bold]Refreshing universe from CBOE...[/bold]")
             with Progress(
-                SpinnerColumn(),
+                SpinnerColumn(spinner_name="line"),
                 TextColumn("[progress.description]{task.description}"),
                 console=console,
             ) as progress:
