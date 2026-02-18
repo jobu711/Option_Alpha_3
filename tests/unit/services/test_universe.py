@@ -72,26 +72,27 @@ def _index_to_alpha_symbol(index: int) -> str:
 
 
 def _build_csv(count: int = 150) -> str:
-    """Build a mock CBOE CSV with the given number of tickers."""
-    lines = ["Symbol,Company Name,Sector"]
-    # Include some well-known large caps for tier testing
+    """Build a mock CBOE equity & index options directory CSV.
+
+    The real CBOE directory CSV has a header row:
+    ``Company Name, Stock Symbol, DPM Name, Post/Station``
+    """
     large_caps = ["AAPL", "MSFT", "AMZN", "GOOGL", "META"]
     etfs = ["SPY", "QQQ", "IWM"]
 
-    for i in range(count):
-        if i < len(large_caps):
-            symbol = large_caps[i]
-            name = f"{symbol} Inc."
-            sector = "Information Technology"
-        elif i < len(large_caps) + len(etfs):
-            symbol = etfs[i - len(large_caps)]
-            name = f"{symbol} ETF Trust"
-            sector = "Financials"
-        else:
-            symbol = _index_to_alpha_symbol(i)
-            name = f"Test Company {symbol}"
-            sector = GICS_SECTORS[i % len(GICS_SECTORS)]
-        lines.append(f"{symbol},{name},{sector}")
+    lines: list[str] = []
+    lines.append("Company Name, Stock Symbol, DPM Name, Post/Station")
+
+    for etf in etfs:
+        lines.append(f'"{etf} ETF Trust","{etf}","Market Maker LLC","1/1"')
+
+    for lc in large_caps:
+        lines.append(f'"{lc} Inc.","{lc}","Market Maker LLC","2/1"')
+
+    remaining = count - len(large_caps) - len(etfs)
+    for i in range(max(0, remaining)):
+        symbol = _index_to_alpha_symbol(i)
+        lines.append(f'"Test Company {symbol}","{symbol}","Market Maker LLC","2/1"')
 
     return "\n".join(lines)
 
@@ -467,27 +468,43 @@ class TestGetStats:
 
 
 class TestCSVParsing:
-    """Tests for CSV parsing edge cases."""
+    """Tests for CSV parsing edge cases with CBOE directory format."""
 
     def test_skips_non_alpha_symbols(self, service: UniverseService) -> None:
         """Symbols with special characters are skipped."""
-        csv_text = "Symbol,Company Name,Sector\nAAPL,Apple,Tech\nA-B,Weird,Tech\n"
+        csv_text = (
+            "Company Name, Stock Symbol, DPM Name, Post/Station\n"
+            '"Apple Inc.","AAPL","MM LLC","2/1"\n'
+            '"Weird Corp","A-B","MM LLC","2/1"\n'
+        )
         tickers = service._parse_csv(csv_text)
         assert len(tickers) == 1
         assert tickers[0].symbol == "AAPL"
 
     def test_skips_empty_symbols(self, service: UniverseService) -> None:
         """Rows with empty symbol are skipped."""
-        csv_text = "Symbol,Company Name,Sector\n,NoSymbol,Tech\nAAPL,Apple,Tech\n"
+        csv_text = (
+            "Company Name, Stock Symbol, DPM Name, Post/Station\n"
+            '"NoSymbol Corp","","MM LLC","2/1"\n'
+            '"Apple Inc.","AAPL","MM LLC","2/1"\n'
+        )
         tickers = service._parse_csv(csv_text)
         assert len(tickers) == 1
+        assert tickers[0].symbol == "AAPL"
 
-    def test_handles_alternative_column_names(self, service: UniverseService) -> None:
-        """Parser handles different column name variations."""
-        csv_text = "Ticker,Name,Sector\nMSFT,Microsoft,Technology\n"
+    def test_classifies_etfs_by_name_heuristic(self, service: UniverseService) -> None:
+        """Parser classifies ETFs using name-based heuristics."""
+        csv_text = (
+            "Company Name, Stock Symbol, DPM Name, Post/Station\n"
+            '"SPDR S&P 500 ETF Trust","SPY","MM LLC","1/1"\n'
+            '"Microsoft Corp","MSFT","MM LLC","2/1"\n'
+        )
         tickers = service._parse_csv(csv_text)
-        assert len(tickers) == 1
-        assert tickers[0].symbol == "MSFT"
+        assert len(tickers) == 2
+        spy = next(t for t in tickers if t.symbol == "SPY")
+        msft = next(t for t in tickers if t.symbol == "MSFT")
+        assert spy.asset_type == "etf"
+        assert msft.asset_type == "equity"
 
 
 # ---------------------------------------------------------------------------

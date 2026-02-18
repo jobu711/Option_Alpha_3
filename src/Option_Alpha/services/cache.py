@@ -53,6 +53,7 @@ DATA_TYPE_IV_PERCENTILE: Final[str] = "iv_percentile"
 DATA_TYPE_FUNDAMENTALS: Final[str] = "fundamentals"
 DATA_TYPE_EARNINGS: Final[str] = "earnings"
 DATA_TYPE_FAILURE: Final[str] = "failure"
+DATA_TYPE_UNIVERSE: Final[str] = "universe"
 
 # Lazy cleanup: run eviction at most every N accesses
 LAZY_CLEANUP_INTERVAL: Final[int] = 100
@@ -136,12 +137,18 @@ class ServiceCache:
             self._sqlite_initialized = True
             logger.info("SQLite cache table initialized.")
 
+    async def _ensure_sqlite_initialized(self) -> None:
+        """Lazily initialize the SQLite cache table on first use."""
+        if self._database is not None and not self._sqlite_initialized:
+            await self.initialize()
+
     async def get(self, key: str) -> str | None:
         """Retrieve a cached value by key.
 
         Checks in-memory first, then SQLite. Returns None on miss or if the
         entry has expired. Expired entries are lazily removed.
         """
+        await self._ensure_sqlite_initialized()
         self._increment_access_count()
 
         # Check in-memory cache first
@@ -172,10 +179,11 @@ class ServiceCache:
         """Store a value in the cache.
 
         Short-TTL data (option chains, quotes) is stored in memory only.
-        Persistent data (OHLCV, fundamentals, IV rank, earnings, failures)
-        is stored in SQLite. The routing is determined by the data type
-        extracted from the key.
+        Persistent data (OHLCV, fundamentals, IV rank, earnings, failures,
+        universe) is stored in SQLite. The routing is determined by the data
+        type extracted from the key.
         """
+        await self._ensure_sqlite_initialized()
         now = datetime.datetime.now(datetime.UTC)
         entry = CacheEntry(
             key=key,
@@ -331,6 +339,7 @@ class ServiceCache:
             DATA_TYPE_FUNDAMENTALS,
             DATA_TYPE_EARNINGS,
             DATA_TYPE_FAILURE,
+            DATA_TYPE_UNIVERSE,
         }
         return data_type in sqlite_types
 
