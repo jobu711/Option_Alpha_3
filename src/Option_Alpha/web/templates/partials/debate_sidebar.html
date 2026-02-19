@@ -1,0 +1,93 @@
+<!-- Market Context Sidebar -->
+<div class="space-y-4">
+
+  <!-- Debate History -->
+  {% if debates and debates|length > 0 %}
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Debate History</h3>
+    <div class="space-y-2">
+      {% for debate in debates[:5] %}
+      <div class="flex items-center justify-between py-1.5
+        {% if loop.first %}bg-zinc-800/50 -mx-2 px-2 rounded{% endif %}">
+        <div class="flex items-center gap-2">
+          <div class="w-1.5 h-1.5 rounded-full
+            {% if debate.direction.value == 'BULLISH' %}bg-emerald-400
+            {% elif debate.direction.value == 'BEARISH' %}bg-red-400
+            {% else %}bg-zinc-500{% endif %}"></div>
+          <span class="text-xs font-medium
+            {% if debate.direction.value == 'BULLISH' %}text-emerald-400
+            {% elif debate.direction.value == 'BEARISH' %}text-red-400
+            {% else %}text-zinc-400{% endif %}">
+            {{ debate.direction.value }}
+          </span>
+        </div>
+        <span class="text-xs text-zinc-500 font-mono">{{ debate.conviction|pct }}</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Thesis Details (if available) -->
+  {% if thesis %}
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Analysis Details</h3>
+    <dl class="space-y-3 text-sm">
+      <div class="flex justify-between">
+        <dt class="text-zinc-500">Direction</dt>
+        <dd class="font-medium
+          {% if thesis.direction.value == 'BULLISH' %}text-emerald-400
+          {% elif thesis.direction.value == 'BEARISH' %}text-red-400
+          {% else %}text-zinc-300{% endif %}">
+          {{ thesis.direction.value }}
+        </dd>
+      </div>
+      <div class="flex justify-between">
+        <dt class="text-zinc-500">Conviction</dt>
+        <dd class="font-mono text-zinc-300">{{ thesis.conviction|pct }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt class="text-zinc-500">Model</dt>
+        <dd class="text-zinc-300">{{ thesis.model_used }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt class="text-zinc-500">Total Tokens</dt>
+        <dd class="font-mono text-zinc-300">{{ thesis.total_tokens }}</dd>
+      </div>
+      <div class="flex justify-between">
+        <dt class="text-zinc-500">Duration</dt>
+        <dd class="font-mono text-zinc-300">{{ thesis.duration_ms }}ms</dd>
+      </div>
+    </dl>
+  </div>
+  {% endif %}
+
+  <!-- Quick Navigate -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Quick Debate</h3>
+    <form x-data="{ t: '' }"
+          @submit.prevent="if (t.trim()) { window.location.href = '/debate/' + t.trim().toUpperCase(); }">
+      <div class="flex items-center gap-2">
+        <input type="text"
+               x-model="t"
+               placeholder="Ticker"
+               class="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-100
+                      placeholder-zinc-500 focus:outline-none focus:border-zinc-500 text-sm uppercase font-mono"
+               maxlength="10">
+        <button type="submit"
+                class="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-sm font-medium transition-colors">
+          Go
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Disclaimer Reminder -->
+  <div class="rounded-lg p-3 bg-amber-950/20 border border-amber-900/30">
+    <p class="text-amber-300/70 text-xs leading-relaxed">
+      This is an educational tool. AI-generated debate results are not investment advice.
+      Always do your own research.
+    </p>
+  </div>
+
+</div>

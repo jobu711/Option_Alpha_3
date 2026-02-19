@@ -125,9 +125,23 @@ def create_app() -> FastAPI:
     templates.env.globals["disclaimer_text"] = DISCLAIMER_TEXT
 
     # Routes
-    from Option_Alpha.web.routes import dashboard
+    from Option_Alpha.web.routes import (
+        dashboard,
+        debate,
+        health,
+        scanner,
+        settings,
+        universe,
+        watchlists,
+    )
 
     app.include_router(dashboard.router)
+    app.include_router(scanner.router)
+    app.include_router(debate.router)
+    app.include_router(watchlists.router)
+    app.include_router(universe.router)
+    app.include_router(health.router)
+    app.include_router(settings.router)
 
     # Static files
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")

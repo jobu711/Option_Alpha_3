@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}{% if ticker %}{{ ticker }} Debate{% else %}Debate{% endif %} — Option Alpha{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-zinc-100">
+      {% if ticker %}{{ ticker }} — AI Debate{% else %}AI Debate{% endif %}
+    </h1>
+
+    {% if ticker %}
+    <!-- Period selector for chart -->
+    <div class="flex items-center gap-2" x-data="{ activePeriod: '6mo' }">
+      {% for p in ['1mo', '3mo', '6mo', '1y', '2y'] %}
+      <button class="px-3 py-1 text-xs rounded font-medium transition-colors"
+              :class="activePeriod === '{{ p }}' ? 'bg-zinc-700 text-zinc-100' : 'bg-zinc-800 text-zinc-400 hover:text-zinc-200'"
+              @click="
+                activePeriod = '{{ p }}';
+                destroyChart(window._debateChart);
+                fetch('/api/ticker/{{ ticker }}/ohlcv?period={{ p }}')
+                  .then(r => r.json())
+                  .then(data => { window._debateChart = createPriceChart('price-chart', data); })
+              ">{{ p }}</button>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+
+  {% if not ticker %}
+  <!-- Landing: Ticker Input -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-8 text-center max-w-lg mx-auto">
+    <div class="text-zinc-600 mb-4">
+      <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+              d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4"/>
+      </svg>
+    </div>
+    <p class="text-zinc-300 mb-6 text-sm">Enter a ticker symbol to run an AI-powered Bull vs Bear debate.</p>
+    <form x-data="{ ticker: '' }"
+          @submit.prevent="if (ticker.trim()) { window.location.href = '/debate/' + ticker.trim().toUpperCase(); }">
+      <div class="flex items-center gap-3 justify-center">
+        <input type="text"
+               x-model="ticker"
+               placeholder="e.g. AAPL"
+               class="w-32 px-4 py-2 bg-zinc-800 border border-zinc-700 rounded-lg text-zinc-100 text-center
+                      placeholder-zinc-500 focus:outline-none focus:border-zinc-500 uppercase text-lg font-mono"
+               maxlength="10"
+               autofocus>
+        <button type="submit"
+                class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors">
+          Analyze
+        </button>
+      </div>
+    </form>
+  </div>
+
+  {% else %}
+  <!-- Ticker View: Chart + Debate Content + Sidebar -->
+
+  <!-- Price Chart -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <script src="/static/js/lightweight-charts.standalone.production.js"></script>
+    <script src="/static/js/charts.js"></script>
+    <div id="price-chart" class="w-full h-[300px] rounded"
+         x-data
+         x-init="
+           fetch('/api/ticker/{{ ticker }}/ohlcv?period=6mo')
+             .then(r => r.json())
+             .then(data => {
+               if (!data.error) {
+                 window._debateChart = createPriceChart('price-chart', data);
+               }
+             })
+             .catch(() => {})
+         "
+         @htmx:before-swap.window="destroyChart(window._debateChart)">
+    </div>
+  </div>
+
+  <!-- Two-column layout: Debate Content + Sidebar -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+    <!-- Main Content (2/3 width) -->
+    <div class="lg:col-span-2" id="debate-content">
+
+      {% if thesis %}
+        {% include "partials/debate_content.html" %}
+      {% else %}
+        <!-- No debate yet — show Run Debate button -->
+        <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-8 text-center">
+          <p class="text-zinc-400 mb-4">No debate results for {{ ticker }} yet.</p>
+          <button hx-post="/debate/{{ ticker }}/run"
+                  hx-target="#debate-content"
+                  hx-swap="innerHTML"
+                  hx-indicator="#debate-loading"
+                  class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors">
+            Run AI Debate
+          </button>
+          <div id="debate-loading" class="htmx-indicator mt-4">
+            <div class="flex items-center justify-center gap-2 text-zinc-400 text-sm">
+              <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              Running debate... this may take a minute
+            </div>
+          </div>
+        </div>
+      {% endif %}
+
+    </div>
+
+    <!-- Sidebar (1/3 width) -->
+    <div class="lg:col-span-1">
+      {% include "partials/debate_sidebar.html" %}
+    </div>
+
+  </div>
+
+  {% endif %}
+</div>
+{% endblock %}

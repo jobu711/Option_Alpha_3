@@ -1,0 +1,118 @@
+{% if error %}
+<!-- Error State -->
+<div class="bg-red-950/30 border border-red-800/50 rounded-lg p-6 text-center">
+  <p class="text-red-300 text-sm">{{ error }}</p>
+  {% if ticker %}
+  <button hx-post="/debate/{{ ticker }}/run"
+          hx-target="#debate-content"
+          hx-swap="innerHTML"
+          hx-indicator="#debate-loading-retry"
+          class="mt-4 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm font-medium transition-colors">
+    Retry
+  </button>
+  <div id="debate-loading-retry" class="htmx-indicator mt-3">
+    <span class="text-zinc-400 text-xs">Retrying...</span>
+  </div>
+  {% endif %}
+</div>
+
+{% elif thesis %}
+<!-- Debate Results -->
+<div class="space-y-4">
+
+  <!-- Verdict Banner -->
+  <div class="rounded-lg p-5
+    {% if thesis.direction.value == 'BULLISH' %}bg-emerald-950/30 border border-emerald-800/50
+    {% elif thesis.direction.value == 'BEARISH' %}bg-red-950/30 border border-red-800/50
+    {% else %}bg-zinc-800/50 border border-zinc-700{% endif %}">
+    <div class="flex items-center justify-between mb-2">
+      <h2 class="text-lg font-bold
+        {% if thesis.direction.value == 'BULLISH' %}text-emerald-400
+        {% elif thesis.direction.value == 'BEARISH' %}text-red-400
+        {% else %}text-zinc-300{% endif %}">
+        Verdict: {{ thesis.direction.value }}
+      </h2>
+      <span class="text-sm font-mono
+        {% if thesis.conviction >= 0.7 %}text-emerald-400
+        {% elif thesis.conviction >= 0.4 %}text-amber-400
+        {% else %}text-red-400{% endif %}">
+        {{ thesis.conviction|pct }} conviction
+      </span>
+    </div>
+    <p class="text-sm text-zinc-300">{{ thesis.recommended_action }}</p>
+  </div>
+
+  <!-- Bull Case -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
+      <h3 class="text-sm font-semibold text-emerald-400 uppercase tracking-wide">Bull Case</h3>
+    </div>
+    <p class="text-sm text-zinc-300 leading-relaxed">{{ thesis.bull_summary }}</p>
+  </div>
+
+  <!-- Bear Case -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-2 h-2 rounded-full bg-red-400"></div>
+      <h3 class="text-sm font-semibold text-red-400 uppercase tracking-wide">Bear Case</h3>
+    </div>
+    <p class="text-sm text-zinc-300 leading-relaxed">{{ thesis.bear_summary }}</p>
+  </div>
+
+  <!-- Entry Rationale -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-2 h-2 rounded-full bg-blue-400"></div>
+      <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wide">Entry Rationale</h3>
+    </div>
+    <p class="text-sm text-zinc-300 leading-relaxed">{{ thesis.entry_rationale }}</p>
+  </div>
+
+  <!-- Risk Factors -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+    <div class="flex items-center gap-2 mb-3">
+      <div class="w-2 h-2 rounded-full bg-amber-400"></div>
+      <h3 class="text-sm font-semibold text-amber-400 uppercase tracking-wide">Risk Factors</h3>
+    </div>
+    <ul class="space-y-2">
+      {% for risk in thesis.risk_factors %}
+      <li class="text-sm text-zinc-300 flex items-start gap-2">
+        <span class="text-amber-500 mt-0.5 shrink-0">&#x2022;</span>
+        {{ risk }}
+      </li>
+      {% endfor %}
+    </ul>
+  </div>
+
+  <!-- Metadata -->
+  <div class="flex items-center gap-4 text-xs text-zinc-500 pt-2">
+    <span>Model: {{ thesis.model_used }}</span>
+    <span>Tokens: {{ thesis.total_tokens }}</span>
+    <span>Duration: {{ thesis.duration_ms }}ms</span>
+  </div>
+
+  <!-- Run Again Button -->
+  {% if ticker %}
+  <div class="pt-2">
+    <button hx-post="/debate/{{ ticker }}/run"
+            hx-target="#debate-content"
+            hx-swap="innerHTML"
+            hx-indicator="#debate-loading-rerun"
+            class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700">
+      Run Again
+    </button>
+    <div id="debate-loading-rerun" class="htmx-indicator inline-block ml-2">
+      <span class="text-zinc-400 text-xs">Running...</span>
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+
+{% else %}
+<!-- Fallback: No thesis and no error -->
+<div class="bg-zinc-900 border border-zinc-800 rounded-lg p-8 text-center">
+  <p class="text-zinc-400 text-sm">No debate data available.</p>
+</div>
+{% endif %}
