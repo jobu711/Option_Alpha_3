@@ -13,7 +13,7 @@ import sqlite3
 from Option_Alpha.data.database import Database
 from Option_Alpha.models.analysis import TradeThesis
 from Option_Alpha.models.enums import SignalDirection
-from Option_Alpha.models.scan import ScanRun, TickerScore, WatchlistSummary
+from Option_Alpha.models.scan import ScanRun, TickerScore, UniversePreset, WatchlistSummary
 
 logger = logging.getLogger(__name__)
 
@@ -323,6 +323,55 @@ class Repository:
         """Delete a watchlist and all its ticker associations (CASCADE)."""
         conn = self._db.connection
         await conn.execute("DELETE FROM watchlists WHERE id = ?", (watchlist_id,))
+        await conn.commit()
+
+    # ------------------------------------------------------------------
+    # Universe preset CRUD
+    # ------------------------------------------------------------------
+
+    async def save_preset(self, name: str, filters: str) -> int:
+        """Save a universe filter preset. Returns the preset ID."""
+        conn = self._db.connection
+        created_at = datetime.datetime.now(datetime.UTC).isoformat()
+        cursor = await conn.execute(
+            "INSERT INTO universe_presets (name, filters, created_at) VALUES (?, ?, ?)",
+            (name, filters, created_at),
+        )
+        await conn.commit()
+        preset_id = cursor.lastrowid
+        if preset_id is None:
+            msg = "Failed to retrieve lastrowid after preset insert."
+            raise RuntimeError(msg)
+        return preset_id
+
+    async def list_presets(self) -> list[UniversePreset]:
+        """Return all universe filter presets ordered by name."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT id, name, filters, created_at FROM universe_presets ORDER BY name"
+        )
+        rows = await cursor.fetchall()
+        return [
+            UniversePreset(id=row[0], name=row[1], filters=row[2], created_at=row[3])
+            for row in rows
+        ]
+
+    async def get_preset(self, preset_id: int) -> UniversePreset | None:
+        """Return a single universe preset by ID, or None if not found."""
+        conn = self._db.connection
+        cursor = await conn.execute(
+            "SELECT id, name, filters, created_at FROM universe_presets WHERE id = ?",
+            (preset_id,),
+        )
+        row = await cursor.fetchone()
+        if row is None:
+            return None
+        return UniversePreset(id=row[0], name=row[1], filters=row[2], created_at=row[3])
+
+    async def delete_preset(self, preset_id: int) -> None:
+        """Delete a universe filter preset."""
+        conn = self._db.connection
+        await conn.execute("DELETE FROM universe_presets WHERE id = ?", (preset_id,))
         await conn.commit()
 
 

@@ -14,7 +14,6 @@ import asyncio
 import datetime
 import logging
 import signal
-import uuid
 from decimal import Decimal
 from typing import Annotated
 
@@ -31,8 +30,8 @@ from Option_Alpha.models import (
     TickerScore,
     TradeThesis,
 )
-from Option_Alpha.models.market_data import OHLCV, TickerInfo
 from Option_Alpha.reporting.disclaimer import DISCLAIMER_TEXT
+from Option_Alpha.web.scan_pipeline import CancelFlag, ScanComplete, ScanProgress
 
 # ---------------------------------------------------------------------------
 # Typer app and sub-apps
@@ -150,14 +149,11 @@ async def _scan_async(
     top_n: int,
     min_score: float,
 ) -> None:
-    """Execute the 5-phase scan pipeline asynchronously.
+    """Execute the 5-phase scan pipeline asynchronously via the shared generator.
 
-    Phases:
-        1. Load universe and batch-fetch OHLCV data.
-        2. Compute indicators, normalize, score, and determine direction.
-        3. Fetch earnings catalysts and apply adjustments.
-        4. Fetch option chains for top tickers.
-        5. Persist ScanRun and ticker scores.
+    Consumes ``run_scan_pipeline()`` events and renders rich terminal output
+    for each progress event. The scan can be cancelled via Ctrl+C which sets
+    the ``_scan_cancelled`` flag checked by the ``CancelFlag`` wrapper.
     """
     global _scan_cancelled  # noqa: PLW0603
     _scan_cancelled = False
@@ -167,250 +163,66 @@ async def _scan_async(
         raise typer.Exit(code=1)
 
     async with _scan_lock:
-        # Lazy imports to avoid heavy startup cost when running other commands
-        from Option_Alpha.analysis import (
-            apply_catalyst_adjustment,
-            catalyst_proximity_score,
-            determine_direction,
-            recommend_contract,
-            score_universe,
-        )
-        from Option_Alpha.data import Database, Repository
-        from Option_Alpha.indicators import (
-            ad_trend,
-            adx,
-            atr_percent,
-            bb_width,
-            keltner_width,
-            obv_trend,
-            relative_volume,
-            roc,
-            rsi,
-            sma_alignment,
-            stoch_rsi,
-            supertrend,
-            vwap_deviation,
-            williams_r,
-        )
+        from Option_Alpha.analysis import recommend_contract
+        from Option_Alpha.data import Database
+        from Option_Alpha.models import SignalDirection as _SignalDirection
         from Option_Alpha.services import (
-            MarketDataService,
             OptionsDataService,
             RateLimiter,
             ServiceCache,
-            UniverseService,
         )
+        from Option_Alpha.web.scan_pipeline import run_scan_pipeline
 
         logger = logging.getLogger(__name__)
-        scan_id = str(uuid.uuid4())
-        started_at = datetime.datetime.now(datetime.UTC)
+
+        # Bridge the global _scan_cancelled flag to a CancelFlag instance
+        cancel_flag = CancelFlag()
 
         async with Database(DEFAULT_DB_PATH) as db:
-            cache = ServiceCache(database=db)
-            rate_limiter = RateLimiter()
-            repo = Repository(db)
-            market_service = MarketDataService(rate_limiter=rate_limiter, cache=cache)
-            options_service = OptionsDataService(rate_limiter=rate_limiter, cache=cache)
-            universe_service = UniverseService(cache=cache, rate_limiter=rate_limiter)
+            # Track state for the post-pipeline display
+            final_scores: list[TickerScore] = []
+            last_phase = 0
 
-            try:
-                # ---------------------------------------------------------------
-                # Phase 1: Load universe and fetch OHLCV
-                # ---------------------------------------------------------------
-                console.print(
-                    "\n[bold cyan]Phase 1/5: Loading universe and fetching market data[/bold cyan]"
-                )
+            with Progress(
+                SpinnerColumn(spinner_name="line"),
+                TextColumn("[progress.description]{task.description}"),
+                console=console,
+            ) as progress:
+                task = progress.add_task("Starting scan...", total=None)
 
-                universe = await universe_service.get_universe(preset=preset)
-                if not universe:
-                    logger.warning("Universe empty for preset '%s', attempting refresh", preset)
-                    universe = await universe_service.refresh()
-                    universe = await universe_service.get_universe(preset=preset)
+                async for event in run_scan_pipeline(
+                    db,
+                    preset=preset,
+                    sector_list=sector_list,
+                    top_n=top_n,
+                    min_score=min_score,
+                    cancelled=cancel_flag,
+                ):
+                    # Check if user pressed Ctrl+C
+                    if _scan_cancelled:
+                        cancel_flag.set()
+                        console.print(f"[yellow]Scan cancelled after Phase {last_phase}.[/yellow]")
+                        raise typer.Exit(code=0)
 
-                if sector_list:
-                    filtered_tickers: list[TickerInfo] = []
-                    for sector_name in sector_list:
-                        sector_tickers = await universe_service.filter_by_sector(
-                            universe, sector=sector_name
-                        )
-                        filtered_tickers.extend(sector_tickers)
-                    universe = filtered_tickers
+                    if isinstance(event, ScanProgress):
+                        last_phase = event.phase
+                        msg = f"Phase {event.phase}/5: {event.phase_name} — {event.message}"
+                        progress.update(task, description=msg)
+                    elif isinstance(event, ScanComplete):
+                        progress.update(task, description="Scan complete", completed=1)
+                        final_scores = event.scores
 
-                if not universe:
-                    console.print(
-                        "[red]No tickers found for the given preset/sector filters.[/red]"
-                    )
-                    raise typer.Exit(code=1)
+            # Post-pipeline: fetch options for rich table display
+            # (the pipeline persists results; we just need options for display)
+            if final_scores:
+                cache = ServiceCache(database=db)
+                rate_limiter = RateLimiter()
+                options_service = OptionsDataService(rate_limiter=rate_limiter, cache=cache)
 
-                ticker_symbols = [t.symbol for t in universe]
-                console.print(f"  Loaded {len(ticker_symbols)} tickers")
+                from Option_Alpha.analysis import determine_direction
 
-                with Progress(
-                    SpinnerColumn(spinner_name="line"),
-                    TextColumn("[progress.description]{task.description}"),
-                    console=console,
-                ) as progress:
-                    task = progress.add_task(
-                        f"Fetching OHLCV for {len(ticker_symbols)} tickers...",
-                        total=None,
-                    )
-                    batch_results = await market_service.fetch_batch_ohlcv(ticker_symbols)
-                    progress.update(task, completed=1)
-
-                # Separate successes and failures
-                ohlcv_data: dict[str, list[OHLCV]] = {}
-                fetch_failures: list[str] = []
-                for ticker_sym, result in batch_results.items():
-                    if isinstance(result, Exception):
-                        fetch_failures.append(ticker_sym)
-                        logger.warning("OHLCV fetch failed for %s: %s", ticker_sym, result)
-                    else:
-                        ohlcv_data[ticker_sym] = result
-
-                if fetch_failures:
-                    fail_count = len(fetch_failures)
-                    console.print(
-                        f"  [yellow]Warning: {fail_count} tickers failed OHLCV fetch[/yellow]"
-                    )
-
-                if not ohlcv_data:
-                    console.print("[red]No OHLCV data retrieved. Aborting scan.[/red]")
-                    raise typer.Exit(code=1)
-
-                console.print(f"  Fetched data for {len(ohlcv_data)} tickers")
-
-                if _scan_cancelled:
-                    console.print("[yellow]Scan cancelled after Phase 1.[/yellow]")
-                    raise typer.Exit(code=0)
-
-                # ---------------------------------------------------------------
-                # Phase 2: Compute indicators, normalize, score, direction
-                # ---------------------------------------------------------------
-                console.print(
-                    "\n[bold cyan]Phase 2/5: Computing indicators and scoring[/bold cyan]"
-                )
-
-                universe_indicators: dict[str, dict[str, float]] = {}
-
-                for ticker_sym, bars in ohlcv_data.items():
-                    try:
-                        # Convert OHLCV models to pandas Series for indicators
-                        close_prices = pd.Series(
-                            [float(bar.close) for bar in bars],
-                            dtype=float,
-                        )
-                        high_prices = pd.Series(
-                            [float(bar.high) for bar in bars],
-                            dtype=float,
-                        )
-                        low_prices = pd.Series(
-                            [float(bar.low) for bar in bars],
-                            dtype=float,
-                        )
-                        volume_series = pd.Series(
-                            [float(bar.volume) for bar in bars],
-                            dtype=float,
-                        )
-
-                        indicators: dict[str, float] = {}
-
-                        # Oscillators
-                        rsi_series = rsi(close_prices)
-                        if not rsi_series.dropna().empty:
-                            indicators["rsi"] = float(rsi_series.dropna().iloc[-1])
-
-                        stoch_series = stoch_rsi(close_prices)
-                        if not stoch_series.dropna().empty:
-                            indicators["stoch_rsi"] = float(stoch_series.dropna().iloc[-1])
-
-                        wr_series = williams_r(high_prices, low_prices, close_prices)
-                        if not wr_series.dropna().empty:
-                            indicators["williams_r"] = float(wr_series.dropna().iloc[-1])
-
-                        # Trend
-                        adx_series = adx(high_prices, low_prices, close_prices)
-                        if not adx_series.dropna().empty:
-                            indicators["adx"] = float(adx_series.dropna().iloc[-1])
-
-                        roc_series = roc(close_prices)
-                        if not roc_series.dropna().empty:
-                            indicators["roc"] = float(roc_series.dropna().iloc[-1])
-
-                        st_series = supertrend(high_prices, low_prices, close_prices)
-                        if not st_series.dropna().empty:
-                            indicators["supertrend"] = float(st_series.dropna().iloc[-1])
-
-                        # Volatility
-                        atr_series = atr_percent(high_prices, low_prices, close_prices)
-                        if not atr_series.dropna().empty:
-                            indicators["atr_percent"] = float(atr_series.dropna().iloc[-1])
-
-                        bb_series = bb_width(close_prices)
-                        if not bb_series.dropna().empty:
-                            indicators["bb_width"] = float(bb_series.dropna().iloc[-1])
-
-                        kw_series = keltner_width(high_prices, low_prices, close_prices)
-                        if not kw_series.dropna().empty:
-                            indicators["keltner_width"] = float(kw_series.dropna().iloc[-1])
-
-                        # Volume
-                        obv_series = obv_trend(close_prices, volume_series)
-                        if not obv_series.dropna().empty:
-                            indicators["obv_trend"] = float(obv_series.dropna().iloc[-1])
-
-                        ad_series = ad_trend(high_prices, low_prices, close_prices, volume_series)
-                        if not ad_series.dropna().empty:
-                            indicators["ad_trend"] = float(ad_series.dropna().iloc[-1])
-
-                        rv_series = relative_volume(volume_series)
-                        if not rv_series.dropna().empty:
-                            indicators["relative_volume"] = float(rv_series.dropna().iloc[-1])
-
-                        # Moving averages
-                        sma_series = sma_alignment(close_prices)
-                        if not sma_series.dropna().empty:
-                            indicators["sma_alignment"] = float(sma_series.dropna().iloc[-1])
-
-                        vwap_series = vwap_deviation(close_prices, volume_series)
-                        if not vwap_series.dropna().empty:
-                            indicators["vwap_deviation"] = float(vwap_series.dropna().iloc[-1])
-
-                        # Options-specific indicators (iv_rank, iv_percentile,
-                        # put_call_ratio, max_pain) are omitted here because they
-                        # require historical IV / options chain data not available
-                        # from basic OHLCV.  The normalization pipeline assigns
-                        # DEFAULT_PERCENTILE (50.0) to any missing indicator
-                        # automatically, which is cleaner than hard-coding placeholders
-                        # that would be indistinguishable from real data.
-
-                        if indicators:
-                            universe_indicators[ticker_sym] = indicators
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Indicator computation failed for %s: %s",
-                            ticker_sym,
-                            exc,
-                        )
-                        continue
-
-                if not universe_indicators:
-                    console.print("[red]No indicators computed. Aborting scan.[/red]")
-                    raise typer.Exit(code=1)
-
-                # Score universe: normalize, invert, composite score, filter, rank
-                scored_tickers = score_universe(universe_indicators)
-
-                # Filter by min_score
-                scored_tickers = [t for t in scored_tickers if t.score >= min_score]
-
-                if not scored_tickers:
-                    console.print(
-                        f"[yellow]No tickers scored above threshold ({min_score}).[/yellow]"
-                    )
-                    raise typer.Exit(code=0)
-
-                # Determine direction for each scored ticker
-                ticker_directions: dict[str, SignalDirection] = {}
-                for ts in scored_tickers:
+                ticker_directions: dict[str, _SignalDirection] = {}
+                for ts in final_scores:
                     adx_val = ts.signals.get("adx", 0.0)
                     rsi_val = ts.signals.get("rsi", 50.0)
                     sma_val = ts.signals.get("sma_alignment", 0.0)
@@ -418,133 +230,31 @@ async def _scan_async(
                         adx=adx_val, rsi=rsi_val, sma_alignment=sma_val
                     )
 
-                console.print(f"  Scored {len(scored_tickers)} tickers above threshold")
-
-                if _scan_cancelled:
-                    console.print("[yellow]Scan cancelled after Phase 2.[/yellow]")
-                    raise typer.Exit(code=0)
-
-                # ---------------------------------------------------------------
-                # Phase 3: Catalyst proximity scoring
-                # ---------------------------------------------------------------
-                console.print("\n[bold cyan]Phase 3/5: Evaluating earnings catalysts[/bold cyan]")
-
-                today = datetime.date.today()
-                try:
-                    # Apply catalyst adjustment to all tickers.
-                    # Without a real earnings calendar, use neutral proximity.
-                    scored_tickers = [
-                        TickerScore(
-                            ticker=t.ticker,
-                            score=apply_catalyst_adjustment(
-                                t.score,
-                                catalyst_proximity_score(
-                                    next_earnings=None,
-                                    reference_date=today,
-                                ),
-                            ),
-                            signals=t.signals,
-                            rank=t.rank,
-                        )
-                        for t in scored_tickers
-                    ]
-
-                    # Re-sort and re-rank after catalyst adjustment
-                    scored_tickers.sort(key=lambda t: t.score, reverse=True)
-                    scored_tickers = [
-                        TickerScore(
-                            ticker=t.ticker,
-                            score=t.score,
-                            signals=t.signals,
-                            rank=rank,
-                        )
-                        for rank, t in enumerate(scored_tickers, start=1)
-                    ]
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Catalyst scoring failed (continuing): %s", exc)
-
-                console.print(f"  Catalyst adjustment applied to {len(scored_tickers)} tickers")
-
-                if _scan_cancelled:
-                    console.print("[yellow]Scan cancelled after Phase 3.[/yellow]")
-                    raise typer.Exit(code=0)
-
-                # ---------------------------------------------------------------
-                # Phase 4: Fetch option chains for top N
-                # ---------------------------------------------------------------
-                console.print(
-                    f"\n[bold cyan]Phase 4/5: Fetching option chains (top {top_n})[/bold cyan]"
-                )
-
-                top_tickers = scored_tickers[:top_n]
                 options_results: dict[str, OptionContract] = {}
+                display_scores = final_scores[:top_n]
+                for ts in display_scores:
+                    direction = ticker_directions.get(ts.ticker, _SignalDirection.NEUTRAL)
+                    if direction == _SignalDirection.NEUTRAL:
+                        continue
+                    try:
+                        contracts = await options_service.fetch_option_chain(
+                            ts.ticker, direction=direction
+                        )
+                        if contracts:
+                            recommended = recommend_contract(contracts, direction)
+                            if recommended is not None:
+                                options_results[ts.ticker] = recommended
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning(
+                            "Options fetch for display failed for %s: %s", ts.ticker, exc
+                        )
 
-                try:
-                    for ts in top_tickers:
-                        direction = ticker_directions.get(ts.ticker, SignalDirection.NEUTRAL)
-                        if direction == SignalDirection.NEUTRAL:
-                            continue
-                        try:
-                            contracts = await options_service.fetch_option_chain(
-                                ts.ticker, direction=direction
-                            )
-                            if contracts:
-                                recommended = recommend_contract(contracts, direction)
-                                if recommended is not None:
-                                    options_results[ts.ticker] = recommended
-                        except Exception as exc:  # noqa: BLE001
-                            logger.warning("Options fetch failed for %s: %s", ts.ticker, exc)
-                            continue
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Options phase failed (continuing): %s", exc)
+                _render_scan_results(display_scores, ticker_directions, options_results)
 
-                console.print(f"  Found option recommendations for {len(options_results)} tickers")
-
-                if _scan_cancelled:
-                    console.print("[yellow]Scan cancelled after Phase 4.[/yellow]")
-                    raise typer.Exit(code=0)
-
-                # ---------------------------------------------------------------
-                # Phase 5: Persist results
-                # ---------------------------------------------------------------
-                console.print("\n[bold cyan]Phase 5/5: Persisting results[/bold cyan]")
-
-                from Option_Alpha.models.scan import ScanRun
-
-                completed_at = datetime.datetime.now(datetime.UTC)
-                scan_run = ScanRun(
-                    id=scan_id,
-                    started_at=started_at,
-                    completed_at=completed_at,
-                    status="completed",
-                    preset=preset,
-                    sectors=sector_list,
-                    ticker_count=len(scored_tickers),
-                    top_n=top_n,
-                )
-
-                try:
-                    await repo.save_scan_run(scan_run)
-                    await repo.save_ticker_scores(scan_id, scored_tickers)
-                    console.print("  Results persisted to database")
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("Failed to persist scan results: %s", exc)
-                    console.print("[yellow]Warning: Failed to persist results[/yellow]")
-
-                # ---------------------------------------------------------------
-                # Display results
-                # ---------------------------------------------------------------
-                _render_scan_results(scored_tickers[:top_n], ticker_directions, options_results)
-
-                elapsed = (completed_at - started_at).total_seconds()
                 console.print(
-                    f"\n[green]Scan complete: {len(scored_tickers)} tickers scored "
-                    f"in {elapsed:.1f}s[/green]"
+                    f"\n[green]Scan complete: {len(final_scores)} tickers scored[/green]"
                 )
                 console.print(f"\n[dim]{DISCLAIMER_TEXT}[/dim]")
-
-            finally:
-                await universe_service.aclose()
 
 
 def _render_scan_results(

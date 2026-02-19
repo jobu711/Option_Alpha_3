@@ -1,0 +1,94 @@
+<!-- Health Status Cards -->
+<div class="space-y-4">
+  <p class="text-sm text-zinc-500">Last checked: {{ status.last_check|timeago }}</p>
+
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+
+    <!-- Ollama -->
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-zinc-200">Ollama</h3>
+        {% if status.ollama_available %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
+          Online
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-red-400">
+          <span class="w-2 h-2 rounded-full bg-red-400" aria-hidden="true"></span>
+          Offline
+        </span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-zinc-500">Local LLM for AI debate</p>
+      {% if status.ollama_models %}
+      <div class="mt-2 pt-2 border-t border-zinc-800">
+        <p class="text-xs text-zinc-500 mb-1">Available models:</p>
+        <div class="flex flex-wrap gap-1">
+          {% for model in status.ollama_models %}
+          <span class="text-xs bg-zinc-800 text-zinc-300 px-2 py-0.5 rounded">{{ model }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Anthropic -->
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-zinc-200">Anthropic</h3>
+        {% if status.anthropic_available %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
+          Online
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-red-400">
+          <span class="w-2 h-2 rounded-full bg-red-400" aria-hidden="true"></span>
+          Offline
+        </span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-zinc-500">Cloud LLM API</p>
+    </div>
+
+    <!-- yfinance -->
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-zinc-200">yfinance</h3>
+        {% if status.yfinance_available %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
+          Online
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-red-400">
+          <span class="w-2 h-2 rounded-full bg-red-400" aria-hidden="true"></span>
+          Offline
+        </span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-zinc-500">Market data provider</p>
+    </div>
+
+    <!-- SQLite -->
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
+      <div class="flex items-center justify-between mb-2">
+        <h3 class="text-sm font-semibold text-zinc-200">SQLite</h3>
+        {% if status.sqlite_available %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-emerald-400">
+          <span class="w-2 h-2 rounded-full bg-emerald-400" aria-hidden="true"></span>
+          Online
+        </span>
+        {% else %}
+        <span class="inline-flex items-center gap-1 text-xs font-medium text-red-400">
+          <span class="w-2 h-2 rounded-full bg-red-400" aria-hidden="true"></span>
+          Offline
+        </span>
+        {% endif %}
+      </div>
+      <p class="text-xs text-zinc-500">Local persistence layer</p>
+    </div>
+
+  </div>
+</div>

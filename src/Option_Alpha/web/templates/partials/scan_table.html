@@ -1,0 +1,83 @@
+<!-- Scan results table — standalone HTMX partial for swap into #scan-results-container -->
+<div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+  <h2 class="text-lg font-semibold text-zinc-200 mb-4">
+    Scan Results
+    <span class="text-sm font-normal text-zinc-500">({{ scores|length }} tickers)</span>
+  </h2>
+  {% if scores %}
+  <div class="overflow-x-auto">
+    <table id="scan-results" class="w-full text-sm">
+      <thead>
+        <tr class="text-zinc-500 border-b border-zinc-800">
+          <th class="text-right py-2 pr-4 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
+              scope="col"
+              hx-get="/scanner/results?sort=rank&direction={% if sort == 'rank' and direction == 'asc' %}desc{% else %}asc{% endif %}"
+              hx-target="#scan-results-container"
+              hx-swap="innerHTML">
+            Rank {% if sort == 'rank' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
+          </th>
+          <th class="text-left py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
+              scope="col"
+              hx-get="/scanner/results?sort=ticker&direction={% if sort == 'ticker' and direction == 'asc' %}desc{% else %}asc{% endif %}"
+              hx-target="#scan-results-container"
+              hx-swap="innerHTML">
+            Ticker {% if sort == 'ticker' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
+          </th>
+          <th class="text-right py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
+              scope="col"
+              hx-get="/scanner/results?sort=score&direction={% if sort == 'score' and direction == 'desc' %}asc{% else %}desc{% endif %}"
+              hx-target="#scan-results-container"
+              hx-swap="innerHTML">
+            Score {% if sort == 'score' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
+          </th>
+          <th class="text-right py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
+              scope="col"
+              hx-get="/scanner/results?sort=rsi&direction={% if sort == 'rsi' and direction == 'desc' %}asc{% else %}desc{% endif %}"
+              hx-target="#scan-results-container"
+              hx-swap="innerHTML">
+            RSI {% if sort == 'rsi' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
+          </th>
+          <th class="text-right py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
+              scope="col"
+              hx-get="/scanner/results?sort=adx&direction={% if sort == 'adx' and direction == 'desc' %}asc{% else %}desc{% endif %}"
+              hx-target="#scan-results-container"
+              hx-swap="innerHTML">
+            ADX {% if sort == 'adx' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
+          </th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for score in scores %}
+        <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors cursor-pointer"
+            hx-get="/debate/{{ score.ticker }}" hx-target="#main-content" hx-push-url="true">
+          <td class="py-2 pr-4 text-right text-zinc-400">{{ score.rank }}</td>
+          <td class="py-2 font-medium text-zinc-100">{{ score.ticker }}</td>
+          <td class="py-2 text-right font-mono
+            {% if score.score >= 70 %}text-emerald-400
+            {% elif score.score >= 40 %}text-amber-400
+            {% else %}text-red-400{% endif %}">
+            {{ score.score|pct_raw }}
+          </td>
+          <td class="py-2 text-right font-mono text-zinc-300">
+            {% if score.signals.get('rsi') is not none %}
+              {{ '%.1f'|format(score.signals['rsi']) }}
+            {% else %}
+              <span class="text-zinc-600">&mdash;</span>
+            {% endif %}
+          </td>
+          <td class="py-2 text-right font-mono text-zinc-300">
+            {% if score.signals.get('adx') is not none %}
+              {{ '%.1f'|format(score.signals['adx']) }}
+            {% else %}
+              <span class="text-zinc-600">&mdash;</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="text-zinc-400 text-center py-4">No results for this scan.</p>
+  {% endif %}
+</div>

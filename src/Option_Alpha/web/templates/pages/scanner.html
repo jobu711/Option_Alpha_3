@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Scanner — Option Alpha{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-zinc-100">Scanner</h1>
+    <button id="run-scan-btn"
+            onclick="this.disabled=true; this.classList.add('opacity-50', 'cursor-not-allowed');
+                     document.getElementById('scan-progress-area').classList.remove('hidden');
+                     var src = new EventSource('/scanner/run');
+                     var btn = this;
+                     src.addEventListener('progress', function(e) {
+                       document.getElementById('scan-progress-area').innerHTML = e.data;
+                     });
+                     src.addEventListener('complete', function(e) {
+                       document.getElementById('scan-results-container').innerHTML = e.data;
+                       document.getElementById('scan-progress-area').classList.add('hidden');
+                       btn.disabled = false;
+                       btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                       src.close();
+                     });
+                     src.addEventListener('error', function() {
+                       document.getElementById('scan-progress-area').innerHTML =
+                         '<div class=\"rounded-lg bg-red-950/50 border border-red-800 p-4\"><div class=\"flex items-start gap-3\"><svg class=\"w-5 h-5 text-red-400 shrink-0 mt-0.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z\"/></svg><div><p class=\"text-red-400 text-sm font-medium\">Scan failed</p><p class=\"text-red-300/70 text-xs mt-1\">Connection lost or server error. Please try again.</p></div></div></div>';
+                       btn.disabled = false;
+                       btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                       src.close();
+                     });"
+            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm
+                   font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+      Run Scan
+    </button>
+  </div>
+
+  <!-- Progress Area (hidden by default) -->
+  <div id="scan-progress-area" class="hidden"></div>
+
+  <!-- Results Table -->
+  <section id="scan-results-container">
+    {% if scores %}
+    {% include "partials/scan_table.html" %}
+    {% else %}
+    {% with empty_message="No scan results yet. Click \"Run Scan\" to start.", empty_action_url=None %}
+      {% include "partials/empty_state.html" %}
+    {% endwith %}
+    {% endif %}
+  </section>
+
+  <!-- Scan History -->
+  {% if scans %}
+  <section class="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+    <h2 class="text-lg font-semibold text-zinc-200 mb-4">Scan History</h2>
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-zinc-500 border-b border-zinc-800">
+          <th class="text-left py-2 font-medium" scope="col">Date</th>
+          <th class="text-left py-2 font-medium" scope="col">Preset</th>
+          <th class="text-right py-2 font-medium" scope="col">Tickers</th>
+          <th class="text-left py-2 font-medium" scope="col">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for scan in scans %}
+        <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors cursor-pointer"
+            hx-get="/scanner/results?scan_id={{ scan.id }}"
+            hx-target="#scan-results-container"
+            hx-swap="innerHTML">
+          <td class="py-2 text-zinc-300">{{ scan.started_at|timeago }}</td>
+          <td class="py-2 text-zinc-400">{{ scan.preset }}</td>
+          <td class="py-2 text-right text-zinc-300">{{ scan.ticker_count }}</td>
+          <td class="py-2">
+            <span class="text-xs px-2 py-0.5 rounded-full
+              {% if scan.status == 'completed' %}bg-emerald-900/50 text-emerald-400
+              {% elif scan.status == 'running' %}bg-amber-900/50 text-amber-400
+              {% else %}bg-red-900/50 text-red-400{% endif %}">
+              {{ scan.status }}
+            </span>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </section>
+  {% endif %}
+</div>
+{% endblock %}
