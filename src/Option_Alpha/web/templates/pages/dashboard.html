@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard — Option Alpha{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <h1 class="text-2xl font-bold text-zinc-100">Dashboard</h1>
+
+  {% if scan %}
+  <!-- Latest Scan Summary Card -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+    <div class="flex items-center justify-between mb-4">
+      <h2 class="text-lg font-semibold text-zinc-200">Latest Scan</h2>
+      <span class="text-sm text-zinc-500">{{ scan.started_at|timeago }}</span>
+    </div>
+    <div class="grid grid-cols-3 gap-4 mb-4">
+      <div>
+        <p class="text-sm text-zinc-500">Tickers Scanned</p>
+        <p class="text-xl font-bold text-zinc-100">{{ scan.ticker_count }}</p>
+      </div>
+      <div>
+        <p class="text-sm text-zinc-500">Status</p>
+        <p class="text-xl font-bold
+          {% if scan.status == 'completed' %}text-emerald-400{% elif scan.status == 'running' %}text-amber-400{% else %}text-red-400{% endif %}">
+          {{ scan.status }}
+        </p>
+      </div>
+      <div>
+        <p class="text-sm text-zinc-500">Preset</p>
+        <p class="text-xl font-bold text-zinc-100">{{ scan.preset }}</p>
+      </div>
+    </div>
+
+    {% if scores %}
+    <!-- Top 5 Tickers Table -->
+    <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-2">Top Tickers</h3>
+    <table class="w-full text-sm">
+      <thead>
+        <tr class="text-zinc-500 border-b border-zinc-800">
+          <th class="text-left py-2 font-medium" scope="col">Rank</th>
+          <th class="text-left py-2 font-medium" scope="col">Ticker</th>
+          <th class="text-right py-2 font-medium" scope="col">Score</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for score in scores %}
+        <tr class="border-b border-zinc-800/50 hover:bg-zinc-800/50 transition-colors cursor-pointer"
+            hx-get="/debate/{{ score.ticker }}" hx-target="#main-content" hx-push-url="true">
+          <td class="py-2 text-zinc-400">{{ score.rank }}</td>
+          <td class="py-2 font-medium text-zinc-100">{{ score.ticker }}</td>
+          <td class="py-2 text-right font-mono
+            {% if score.score >= 70 %}text-emerald-400
+            {% elif score.score >= 40 %}text-amber-400
+            {% else %}text-red-400{% endif %}">
+            {{ score.score|pct_raw }}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endif %}
+  </div>
+  {% else %}
+  <!-- Empty State -->
+  {% include "partials/empty_state.html" %}
+  {% endif %}
+
+  <!-- Quick Actions -->
+  <div class="grid grid-cols-3 gap-4">
+    <a hx-get="/scanner" hx-target="#main-content" hx-push-url="true"
+       class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors text-center cursor-pointer">
+      <p class="text-lg font-semibold text-zinc-100">Run Scan</p>
+      <p class="text-sm text-zinc-500">Scan universe for opportunities</p>
+    </a>
+    <a hx-get="/debate" hx-target="#main-content" hx-push-url="true"
+       class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors text-center cursor-pointer">
+      <p class="text-lg font-semibold text-zinc-100">Quick Debate</p>
+      <p class="text-sm text-zinc-500">AI analysis on any ticker</p>
+    </a>
+    <a hx-get="/watchlists" hx-target="#main-content" hx-push-url="true"
+       class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors text-center cursor-pointer">
+      <p class="text-lg font-semibold text-zinc-100">Watchlists</p>
+      <p class="text-sm text-zinc-500">Manage your tracked tickers</p>
+    </a>
+  </div>
+</div>
+{% endblock %}

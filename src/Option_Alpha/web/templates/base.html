@@ -11,7 +11,8 @@
 </head>
 <body class="h-full bg-zinc-950 text-zinc-100 flex"
       x-data="{
-        collapsed: localStorage.getItem('sidebar_collapsed') === 'true'
+        collapsed: localStorage.getItem('sidebar_collapsed') === 'true',
+        disclaimerDismissed: localStorage.getItem('disclaimer_dismissed') === 'true'
       }"
       x-init="$watch('collapsed', val => localStorage.setItem('sidebar_collapsed', val))">
 
@@ -131,6 +132,18 @@
 
   <!-- Main Content Area -->
   <main class="flex-1 overflow-y-auto">
+    <!-- Disclaimer Banner -->
+    <div x-show="!disclaimerDismissed" x-transition
+         class="bg-amber-950/50 border-b border-amber-800 px-4 py-3">
+      <div class="flex items-start justify-between max-w-7xl mx-auto">
+        <p class="text-amber-200 text-xs leading-relaxed pr-4">{{ disclaimer_text }}</p>
+        <button @click="disclaimerDismissed = true; localStorage.setItem('disclaimer_dismissed', 'true')"
+                class="text-amber-400 hover:text-amber-300 shrink-0 text-xs font-medium">
+          Dismiss
+        </button>
+      </div>
+    </div>
+
     <div id="main-content" class="p-6">
       {% block content %}{% endblock %}
     </div>
