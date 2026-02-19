@@ -118,7 +118,7 @@
         <button class="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded hover:border-zinc-600
                        text-zinc-300 hover:text-zinc-100 transition-colors"
                 @click="
-                  const f = JSON.parse('{{ preset.filters | e }}');
+                  const f = JSON.parse({{ preset.filters | tojson }});
                   document.getElementById('filter-sector').value = (f.sectors && f.sectors[0]) || '';
                   document.getElementById('filter-tier').value = (f.tiers && f.tiers[0]) || '';
                   document.getElementById('filter-source').value = (f.sources && f.sources[0]) || '';

@@ -85,7 +85,7 @@ async def scanner_results(
     )
 
 
-@router.post("/scanner/run")
+@router.get("/scanner/run")
 async def run_scan(
     request: Request,
     db: Database = Depends(get_db),  # noqa: B008

@@ -7,16 +7,10 @@
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-bold text-zinc-100">Scanner</h1>
     <button id="run-scan-btn"
-            hx-post="/scanner/run"
-            hx-ext="sse"
-            sse-connect="/scanner/run"
-            sse-swap="progress"
-            hx-target="#scan-progress-area"
-            hx-swap="innerHTML"
             onclick="this.disabled=true; this.classList.add('opacity-50', 'cursor-not-allowed');
                      document.getElementById('scan-progress-area').classList.remove('hidden');
-                     const src = new EventSource('/scanner/run', {withCredentials: false});
-                     const btn = this;
+                     var src = new EventSource('/scanner/run');
+                     var btn = this;
                      src.addEventListener('progress', function(e) {
                        document.getElementById('scan-progress-area').innerHTML = e.data;
                      });
@@ -27,14 +21,13 @@
                        btn.classList.remove('opacity-50', 'cursor-not-allowed');
                        src.close();
                      });
-                     src.addEventListener('error', function(e) {
+                     src.addEventListener('error', function() {
                        document.getElementById('scan-progress-area').innerHTML =
-                         '<div class=&quot;rounded-lg bg-red-950/50 border border-red-800 p-4&quot;><div class=&quot;flex items-start gap-3&quot;><svg class=&quot;w-5 h-5 text-red-400 shrink-0 mt-0.5&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; viewBox=&quot;0 0 24 24&quot; aria-hidden=&quot;true&quot;><path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;2&quot; d=&quot;M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z&quot;/></svg><div><p class=&quot;text-red-400 text-sm font-medium&quot;>Scan failed</p><p class=&quot;text-red-300/70 text-xs mt-1&quot;>Connection lost or server error. Please try again.</p></div></div></div>';
+                         '<div class=\"rounded-lg bg-red-950/50 border border-red-800 p-4\"><div class=\"flex items-start gap-3\"><svg class=\"w-5 h-5 text-red-400 shrink-0 mt-0.5\" fill=\"none\" stroke=\"currentColor\" viewBox=\"0 0 24 24\" aria-hidden=\"true\"><path stroke-linecap=\"round\" stroke-linejoin=\"round\" stroke-width=\"2\" d=\"M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z\"/></svg><div><p class=\"text-red-400 text-sm font-medium\">Scan failed</p><p class=\"text-red-300/70 text-xs mt-1\">Connection lost or server error. Please try again.</p></div></div></div>';
                        btn.disabled = false;
                        btn.classList.remove('opacity-50', 'cursor-not-allowed');
                        src.close();
-                     });
-                     return false;"
+                     });"
             class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm
                    font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
       Run Scan

@@ -60,7 +60,7 @@
                     rounded-lg shadow-xl py-1">
           {% for wl in watchlists %}
           <button hx-post="/watchlists/{{ wl.id }}/tickers"
-                  hx-vals='{"ticker": "{{ ticker.symbol }}"}'
+                  hx-vals='{"ticker": {{ ticker.symbol | tojson }}}'
                   hx-swap="none"
                   @click="showWl = false; showPopover = false"
                   class="w-full text-left px-3 py-1.5 text-xs text-zinc-300 hover:bg-zinc-700

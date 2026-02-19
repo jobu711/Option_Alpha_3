@@ -31,7 +31,7 @@ _TIER_LABELS: list[tuple[str, str]] = [
 
 def _group_by_sector(tickers: list[TickerInfo]) -> dict[str, list[TickerInfo]]:
     """Group a list of TickerInfo models by sector, sorted alphabetically."""
-    groups: dict[str, list[TickerInfo]] = defaultdict(list)
+    groups: dict[str, list[TickerInfo]] = defaultdict(list)  # dict-ok: sector grouping
     for ticker in tickers:
         groups[ticker.sector].append(ticker)
     # Sort tickers within each group by symbol
@@ -81,15 +81,6 @@ async def universe_page(
         stats = await universe_svc.get_stats()
     finally:
         await universe_svc.aclose()
-
-    # Include inactive tickers if the flag is set
-    if show_inactive:
-        # Re-fetch without the active filter by accessing the internal universe
-        # get_universe("full") only returns active; we need to re-load from cache
-        # and skip the active-only filter. Since the service filters internally,
-        # we accept the active-only list from get_universe and note that
-        # show_inactive will show all returned tickers without further filtering.
-        pass
 
     filtered = _apply_filters(
         all_tickers,
@@ -168,17 +159,21 @@ async def list_presets_json(
     """List presets as JSON (for Scanner page dropdown)."""
     repo = Repository(db)
     presets = await repo.list_presets()
-    return JSONResponse(
-        [
+    items: list[dict[str, object]] = []
+    for p in presets:
+        try:
+            parsed_filters: object = json.loads(p.filters)
+        except (json.JSONDecodeError, TypeError):
+            parsed_filters = {}
+        items.append(
             {
                 "id": p.id,
                 "name": p.name,
-                "filters": json.loads(p.filters),
+                "filters": parsed_filters,
                 "created_at": p.created_at,
             }
-            for p in presets
-        ]
-    )
+        )
+    return JSONResponse(items)
 
 
 @router.delete("/universe/presets/{preset_id}", response_class=HTMLResponse)
