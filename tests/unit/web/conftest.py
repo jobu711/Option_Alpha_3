@@ -127,7 +127,6 @@ def sample_trade_thesis() -> TradeThesis:
         model_used="llama3.1:8b",
         total_tokens=1500,
         duration_ms=3200,
-        disclaimer="This is for educational purposes only. Not investment advice.",
     )
 
 

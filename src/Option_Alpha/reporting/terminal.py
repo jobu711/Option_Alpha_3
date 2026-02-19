@@ -2,7 +2,6 @@
 
 Uses ``rich.console.Console`` for all output. Color scheme:
 green = bullish, red = bearish, yellow = caution.
-Disclaimer is always printed last via import from ``disclaimer.py``.
 """
 
 from __future__ import annotations
@@ -18,7 +17,6 @@ from Option_Alpha.models.enums import SignalDirection
 from Option_Alpha.models.health import HealthStatus
 from Option_Alpha.models.options import OptionContract
 from Option_Alpha.models.scan import TickerScore
-from Option_Alpha.reporting.disclaimer import DISCLAIMER_TEXT
 from Option_Alpha.reporting.formatters import (
     detect_conflicting_signals,
     format_greek_impact,
@@ -198,18 +196,6 @@ def _render_metadata(thesis: TradeThesis, context: MarketContext) -> None:
     console.print(meta_table)
 
 
-def _render_disclaimer() -> None:
-    """Section 8: Legal disclaimer. Always last. Always present."""
-    console.print()
-    console.print(
-        Panel(
-            DISCLAIMER_TEXT,
-            title="Disclaimer",
-            style="dim red",
-        )
-    )
-
-
 def render_report(
     thesis: TradeThesis,
     context: MarketContext,
@@ -218,10 +204,10 @@ def render_report(
 ) -> None:
     """Render a full analysis report to the terminal using Rich.
 
-    Prints all 8 report sections in order:
+    Prints all 7 report sections in order:
     1. Header, 2. Market Snapshot, 3. Strategy Summary,
     4. Debate Summary, 5. Key Factors, 6. Risk Assessment,
-    7. Metadata, 8. Disclaimer.
+    7. Metadata.
 
     Args:
         thesis: Final trade thesis from the debate system.
@@ -236,7 +222,6 @@ def render_report(
     _render_key_factors(thesis)
     _render_risk_assessment(thesis)
     _render_metadata(thesis, context)
-    _render_disclaimer()
 
 
 def render_scan_results(
@@ -299,10 +284,6 @@ def render_scan_results(
 
             signal_str = " ".join(key_signals)
             console.print(f"  #{ts.rank:<3} {ts.ticker:<6} {ts.score:>5.1f} | {signal_str}")
-
-    # Always print disclaimer
-    console.print()
-    console.print(f"[dim]{DISCLAIMER_TEXT}[/dim]")
 
 
 def render_health(status: HealthStatus) -> None:

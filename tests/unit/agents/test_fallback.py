@@ -1,7 +1,7 @@
 """Tests for the data-driven fallback thesis builder.
 
 Verifies direction mapping, conviction clamping, risk factor generation,
-model_used string, and disclaimer content -- all without any LLM calls.
+and model_used string -- all without any LLM calls.
 """
 
 from __future__ import annotations
@@ -67,7 +67,7 @@ class TestFallbackDirection:
 
 
 class TestFallbackMetadata:
-    """Tests for model_used, tokens, and disclaimer."""
+    """Tests for model_used and tokens."""
 
     @pytest.mark.asyncio()
     async def test_model_used_is_fallback(self) -> None:
@@ -85,14 +85,6 @@ class TestFallbackMetadata:
         )
         assert thesis.total_tokens == 0
         assert thesis.duration_ms == 0
-
-    @pytest.mark.asyncio()
-    async def test_disclaimer_present(self) -> None:
-        """disclaimer contains '[DATA-DRIVEN'."""
-        thesis = await build_fallback_thesis(
-            "AAPL", 60.0, SignalDirection.BULLISH, iv_rank=40.0, rsi_14=55.0
-        )
-        assert "[DATA-DRIVEN" in thesis.disclaimer
 
 
 # ---------------------------------------------------------------------------

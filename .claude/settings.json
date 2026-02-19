@@ -51,32 +51,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "bash .claude/hooks/gh-repo-guard.sh"
-          },
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/pre-commit-guard.sh"
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/validate-frontmatter.sh"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash .claude/hooks/session-progress-update.sh"
+            "command": "bash .claude/hooks/pre-push-analyzer.sh"
           }
         ]
       }

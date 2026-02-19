@@ -100,17 +100,3 @@ class TestDashboardRoute:
         assert "AAPL" in response.text
         assert "AMZN" in response.text
         assert "GOOG" not in response.text
-
-    @patch("Option_Alpha.web.routes.dashboard.Repository")
-    def test_dashboard_includes_disclaimer_text(
-        self,
-        mock_repo_cls: AsyncMock,
-        client: TestClient,
-    ) -> None:
-        """GET / includes the disclaimer text from base.html."""
-        mock_repo = AsyncMock()
-        mock_repo.get_latest_scan = AsyncMock(return_value=None)
-        mock_repo_cls.return_value = mock_repo
-
-        response = client.get("/")
-        assert "DISCLAIMER" in response.text

@@ -1,8 +1,7 @@
 """Markdown report generator producing GitHub-Flavored Markdown.
 
-Generates a complete analysis report with all 8 sections. Tables use GFM
-pipe syntax. Disclaimer is always the final section, imported from
-``disclaimer.py``.
+Generates a complete analysis report with all 7 sections. Tables use GFM
+pipe syntax.
 """
 
 from __future__ import annotations
@@ -14,7 +13,6 @@ from pathlib import Path
 from Option_Alpha.models.analysis import MarketContext, TradeThesis
 from Option_Alpha.models.enums import OptionType
 from Option_Alpha.models.options import OptionContract
-from Option_Alpha.reporting.disclaimer import DISCLAIMER_TEXT
 from Option_Alpha.reporting.formatters import (
     build_report_filename,
     detect_conflicting_signals,
@@ -202,17 +200,6 @@ def _section_metadata(thesis: TradeThesis, context: MarketContext) -> str:
     return "\n".join(lines)
 
 
-def _section_disclaimer() -> str:
-    """Section 8: Legal disclaimer. Always last. Always present."""
-    lines: list[str] = []
-    lines.append("---")
-    lines.append("")
-    lines.append(f"> {DISCLAIMER_TEXT}")
-    lines.append("")
-
-    return "\n".join(lines)
-
-
 def generate_markdown_report(
     thesis: TradeThesis,
     context: MarketContext,
@@ -221,10 +208,10 @@ def generate_markdown_report(
 ) -> str:
     """Generate a complete GitHub-Flavored Markdown analysis report.
 
-    Includes all 8 sections in order:
+    Includes all 7 sections in order:
     1. Header, 2. Market Snapshot, 3. Strategy Summary,
     4. Debate Summary, 5. Key Factors, 6. Risk Assessment,
-    7. Metadata, 8. Disclaimer.
+    7. Metadata.
 
     Args:
         thesis: Final trade thesis from the debate system.
@@ -243,7 +230,6 @@ def generate_markdown_report(
         _section_key_factors(thesis),
         _section_risk_assessment(thesis),
         _section_metadata(thesis, context),
-        _section_disclaimer(),
     ]
 
     return "\n".join(sections)

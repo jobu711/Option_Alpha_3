@@ -1,8 +1,8 @@
 """Tests for the RiskAgent.
 
 Verifies that the risk agent synthesizes bull + bear into a TradeThesis,
-preserves direction and disclaimer, sets initial token values, and
-handles parse failures -- all with a mocked LLMClient.
+preserves direction, sets initial token values, and handles parse
+failures -- all with a mocked LLMClient.
 """
 
 from __future__ import annotations
@@ -102,22 +102,6 @@ class TestRiskAgent:
         )
 
         assert thesis.direction == SignalDirection.BULLISH
-
-    @pytest.mark.asyncio()
-    async def test_risk_disclaimer_set(self, sample_market_context: MarketContext) -> None:
-        """disclaimer is the standard educational disclaimer string."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_risk_llm_response())
-
-        agent = RiskAgent(mock_llm)
-        thesis, _ = await agent.run(
-            sample_market_context,
-            _make_agent_response("bull"),
-            _make_agent_response("bear"),
-        )
-
-        assert "educational" in thesis.disclaimer.lower()
-        assert "not investment advice" in thesis.disclaimer.lower()
 
     @pytest.mark.asyncio()
     async def test_risk_initial_tokens_zero(self, sample_market_context: MarketContext) -> None:

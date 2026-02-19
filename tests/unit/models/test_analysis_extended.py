@@ -218,7 +218,6 @@ class TestTradeThesisEdgeCases:
             model_used="data-driven-fallback",
             total_tokens=0,
             duration_ms=100,
-            disclaimer="Not investment advice.",
         )
         assert thesis.direction == SignalDirection.NEUTRAL
 
@@ -234,7 +233,6 @@ class TestTradeThesisEdgeCases:
             model_used="llama3:8b",
             total_tokens=1000,
             duration_ms=5000,
-            disclaimer="Not investment advice.",
         )
         assert thesis.risk_factors == []
 
@@ -250,7 +248,6 @@ class TestTradeThesisEdgeCases:
             model_used="data-driven-fallback",
             total_tokens=0,
             duration_ms=0,
-            disclaimer="Not investment advice.",
         )
         assert thesis.conviction == pytest.approx(0.0, abs=1e-9)
 
@@ -266,7 +263,6 @@ class TestTradeThesisEdgeCases:
             model_used="llama3:8b",
             total_tokens=2000,
             duration_ms=10000,
-            disclaimer="Not investment advice.",
         )
         assert thesis.conviction == pytest.approx(1.0, abs=1e-9)
 
@@ -283,5 +279,4 @@ class TestTradeThesisEdgeCases:
                 model_used="llama3:8b",
                 total_tokens=0,
                 duration_ms=0,
-                disclaimer="Not investment advice.",
             )

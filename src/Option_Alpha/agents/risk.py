@@ -4,9 +4,8 @@ Receives both bull and bear ``AgentResponse`` objects, synthesizes a final
 ``TradeThesis`` with direction, conviction, and risk factors. JSON output is
 parsed and validated with retry logic via the shared ``_parsing`` helper.
 
-The risk agent does NOT populate ``model_used``, ``total_tokens``,
-``duration_ms``, or ``disclaimer`` from the LLM output — those are set
-by code after parsing.
+The risk agent does NOT populate ``model_used``, ``total_tokens``, or
+``duration_ms`` from the LLM output — those are set by code after parsing.
 """
 
 from __future__ import annotations
@@ -16,7 +15,6 @@ import logging
 from pydantic import BaseModel, ConfigDict
 
 from Option_Alpha.agents._parsing import (
-    DISCLAIMER,
     THESIS_SCHEMA_HINT,
     parse_with_retry,
     prompt_to_chat,
@@ -37,8 +35,8 @@ logger = logging.getLogger(__name__)
 class _ThesisParsed(BaseModel):
     """Intermediate model matching the JSON schema the LLM is asked to produce.
 
-    Does NOT include ``model_used``, ``total_tokens``, ``duration_ms``, or
-    ``disclaimer`` — those are added by the orchestrator / risk agent code.
+    Does NOT include ``model_used``, ``total_tokens``, or ``duration_ms``
+    — those are added by the orchestrator / risk agent code.
     """
 
     model_config = ConfigDict(frozen=True)
@@ -57,7 +55,7 @@ class RiskAgent:
 
     Synthesizes the bull and bear arguments into a final ``TradeThesis``.
     The LLM response only provides the content fields; metadata (model,
-    tokens, timing, disclaimer) is added by code.
+    tokens, timing) is added by code.
     """
 
     def __init__(self, llm_client: LLMClient) -> None:
@@ -112,7 +110,6 @@ class RiskAgent:
             model_used=llm_response.model,
             total_tokens=0,
             duration_ms=0,
-            disclaimer=DISCLAIMER,
         )
 
         logger.info(

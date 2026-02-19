@@ -99,11 +99,7 @@ class AgentResponse(BaseModel):
 
 
 class TradeThesis(BaseModel):
-    """Final output of the debate: a directional trade thesis with risk context.
-
-    Every thesis includes a disclaimer field that must be populated from
-    reporting/disclaimer.py before user-facing output.
-    """
+    """Final output of the debate: a directional trade thesis with risk context."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -117,7 +113,6 @@ class TradeThesis(BaseModel):
     model_used: str
     total_tokens: int
     duration_ms: int
-    disclaimer: str
 
     @field_validator("conviction")
     @classmethod

@@ -123,7 +123,6 @@ def sample_trade_thesis() -> TradeThesis:
         model_used="claude-sonnet-4-5-20250929",
         total_tokens=1500,
         duration_ms=3200,
-        disclaimer="This is for educational purposes only. Not investment advice.",
     )
 
 

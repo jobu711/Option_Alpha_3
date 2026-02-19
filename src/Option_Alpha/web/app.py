@@ -12,7 +12,6 @@ from fastapi.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
 from Option_Alpha.data.database import Database
-from Option_Alpha.reporting.disclaimer import DISCLAIMER_TEXT
 
 logger = logging.getLogger(__name__)
 
@@ -111,6 +110,8 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     global templates  # noqa: PLW0603
 
+    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+
     app = FastAPI(title="Option Alpha", docs_url=None, redoc_url=None)
 
     # Jinja2 templates
@@ -120,9 +121,6 @@ def create_app() -> FastAPI:
     templates.env.filters["pct_raw"] = pct_raw_filter
     templates.env.filters["timeago"] = timeago_filter
     templates.env.filters["signal_color"] = signal_color_filter
-
-    # Jinja2 globals
-    templates.env.globals["disclaimer_text"] = DISCLAIMER_TEXT
 
     # Routes
     from Option_Alpha.web.routes import (

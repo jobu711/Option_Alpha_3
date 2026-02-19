@@ -30,10 +30,6 @@ _IV_RANK_LOW: float = 20.0
 
 _ADX_WEAK_TREND: float = 20.0
 
-_FALLBACK_DISCLAIMER: str = (
-    "[DATA-DRIVEN -- no AI debate] This is for educational purposes only. Not investment advice."
-)
-
 
 def _clamp(value: float, low: float, high: float) -> float:
     """Clamp *value* to the inclusive range [low, high]."""
@@ -208,5 +204,4 @@ async def build_fallback_thesis(
         model_used="data-driven-fallback",
         total_tokens=0,
         duration_ms=0,
-        disclaimer=_FALLBACK_DISCLAIMER,
     )

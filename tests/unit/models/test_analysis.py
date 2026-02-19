@@ -5,7 +5,6 @@ Covers:
 - MarketContext is flat (all expected fields present, no nested objects)
 - Conviction validation: values > 1.0 or < 0.0 rejected
 - Decimal fields survive JSON roundtrip
-- TradeThesis has mandatory disclaimer field
 - SignalDirection enum used correctly in TradeThesis
 """
 
@@ -224,7 +223,6 @@ class TestTradeThesis:
         assert sample_trade_thesis.direction is SignalDirection.BULLISH
         assert sample_trade_thesis.conviction == pytest.approx(0.72, abs=0.01)
         assert len(sample_trade_thesis.risk_factors) == 2
-        assert sample_trade_thesis.disclaimer != ""
 
     def test_json_roundtrip(self, sample_trade_thesis: TradeThesis) -> None:
         """TradeThesis survives a full JSON serialize/deserialize cycle."""
@@ -246,7 +244,6 @@ class TestTradeThesis:
                 model_used="test",
                 total_tokens=100,
                 duration_ms=1000,
-                disclaimer="Educational only.",
             )
 
     def test_conviction_below_min_rejected(self) -> None:
@@ -263,7 +260,6 @@ class TestTradeThesis:
                 model_used="test",
                 total_tokens=100,
                 duration_ms=1000,
-                disclaimer="Educational only.",
             )
 
     def test_conviction_at_boundaries(self) -> None:
@@ -298,27 +294,6 @@ class TestTradeThesis:
         )
         assert thesis_one.conviction == pytest.approx(1.0, abs=0.01)
 
-    def test_disclaimer_is_mandatory(self) -> None:
-        """TradeThesis requires a disclaimer field.
-
-        Every verdict must include a disclaimer populated from reporting/disclaimer.py.
-        """
-        # Disclaimer is a required field -- omitting it raises ValidationError
-        with pytest.raises(ValidationError):
-            TradeThesis(
-                direction=SignalDirection.BULLISH,
-                conviction=0.70,
-                entry_rationale="RSI bounce",
-                risk_factors=["Earnings risk"],
-                recommended_action="Buy call",
-                bull_summary="Momentum",
-                bear_summary="Caution",
-                model_used="test",
-                total_tokens=100,
-                duration_ms=1000,
-                # disclaimer intentionally omitted
-            )  # type: ignore[call-arg]
-
     def test_signal_direction_enum_values(self) -> None:
         """All SignalDirection values work in TradeThesis.direction."""
         for direction in SignalDirection:
@@ -333,7 +308,6 @@ class TestTradeThesis:
                 model_used="test",
                 total_tokens=100,
                 duration_ms=1000,
-                disclaimer="Educational only.",
             )
             assert thesis.direction is direction
 

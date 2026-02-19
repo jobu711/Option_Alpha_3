@@ -61,6 +61,43 @@ def _apply_filters(
     return result
 
 
+@router.post("/universe/refresh", response_class=HTMLResponse)
+async def refresh_universe(
+    request: Request,
+    db: Database = Depends(get_db),  # noqa: B008
+) -> HTMLResponse:
+    """Refresh the ticker universe from CBOE and return updated groups."""
+    cache = ServiceCache(database=db)
+    limiter = RateLimiter(max_concurrent=3, requests_per_second=1.0)
+    universe_svc = UniverseService(cache=cache, rate_limiter=limiter)
+
+    try:
+        all_tickers = await universe_svc.refresh()
+    except Exception:
+        logger.exception("Universe refresh failed")
+        return templates.TemplateResponse(
+            "partials/error_message.html",
+            {"request": request, "message": "Failed to refresh universe from CBOE."},
+        )
+    finally:
+        await universe_svc.aclose()
+
+    filtered = [t for t in all_tickers if t.status == "active"]
+    groups = _group_by_sector(filtered)
+    repo = Repository(db)
+    watchlists = await repo.list_watchlists()
+
+    return templates.TemplateResponse(
+        "partials/universe_group.html",
+        {
+            "request": request,
+            "groups": groups,
+            "filtered_count": len(filtered),
+            "watchlists": watchlists,
+        },
+    )
+
+
 @router.get("/universe", response_class=HTMLResponse)
 async def universe_page(
     request: Request,

@@ -37,8 +37,6 @@ _JSON_FENCE_RE: re.Pattern[str] = re.compile(r"```(?:json)?\s*([\s\S]*?)```", re
 # Shared constants used by bull, bear, and risk agents
 # ---------------------------------------------------------------------------
 
-DISCLAIMER: str = "This is for educational purposes only. Not investment advice."
-
 AGENT_RESPONSE_SCHEMA_HINT: str = (
     '{"agent_role": "bull|bear", "analysis": "...", "key_points": ["..."], '
     '"conviction": 0.0, "contracts_referenced": ["..."], '

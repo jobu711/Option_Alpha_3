@@ -190,7 +190,7 @@ class Repository:
                 thesis.recommended_action,
                 thesis.bull_summary,
                 thesis.bear_summary,
-                thesis.disclaimer,
+                "",  # disclaimer column (kept for schema compat)
                 full_thesis_json,
             ),
         )

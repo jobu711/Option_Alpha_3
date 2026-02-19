@@ -61,22 +61,6 @@ class TestRenderReport:
         output = captured.file.getvalue()  # type: ignore[union-attr]
         assert len(output) > 0
 
-    def test_render_report_contains_disclaimer(
-        self,
-        sample_trade_thesis: TradeThesis,
-        sample_market_context: MarketContext,
-    ) -> None:
-        """Disclaimer must appear in the terminal output."""
-        captured = _make_captured_console()
-        with patch("Option_Alpha.reporting.terminal.console", captured):
-            from Option_Alpha.reporting.terminal import render_report
-
-            render_report(sample_trade_thesis, sample_market_context)
-        output = captured.file.getvalue()  # type: ignore[union-attr]
-        # DISCLAIMER_TEXT contains key phrases; check for substrings
-        # Rich may add markup, so check lowercase content
-        assert "disclaimer" in output.lower()
-
     def test_render_report_contains_ticker(
         self,
         sample_trade_thesis: TradeThesis,
@@ -303,18 +287,6 @@ class TestRenderScanResults:
             render_scan_results([], verbose=False)
         output = captured.file.getvalue()  # type: ignore[union-attr]
         assert "threshold" in output.lower() or "no tickers" in output.lower()
-
-    def test_disclaimer_in_scan_results(self) -> None:
-        """Disclaimer should appear in scan results output."""
-        captured = _make_captured_console()
-        scores = self._make_scores()
-        with patch("Option_Alpha.reporting.terminal.console", captured):
-            from Option_Alpha.reporting.terminal import render_scan_results
-
-            render_scan_results(scores, verbose=False)
-        output = captured.file.getvalue()  # type: ignore[union-attr]
-        # Disclaimer text is printed at the end
-        assert "educational" in output.lower() or "DISCLAIMER" in output
 
     def test_compact_shows_rank(self) -> None:
         """Compact format should show the rank number."""

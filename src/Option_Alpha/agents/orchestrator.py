@@ -16,7 +16,6 @@ import httpx
 import ollama
 import pydantic
 
-from Option_Alpha.agents._parsing import DISCLAIMER
 from Option_Alpha.agents.bear import BearAgent
 from Option_Alpha.agents.bull import BullAgent
 from Option_Alpha.agents.fallback import build_fallback_thesis
@@ -227,7 +226,6 @@ class DebateOrchestrator:
             model_used=risk_thesis.model_used,
             total_tokens=total_tokens,
             duration_ms=elapsed_ms,
-            disclaimer=DISCLAIMER,
         )
 
         logger.info(

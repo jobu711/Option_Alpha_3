@@ -14,7 +14,6 @@ from unittest.mock import patch
 from Option_Alpha.models.analysis import MarketContext, TradeThesis
 from Option_Alpha.models.enums import OptionType
 from Option_Alpha.models.options import OptionContract
-from Option_Alpha.reporting.disclaimer import DISCLAIMER_TEXT
 from Option_Alpha.reporting.markdown import generate_markdown_report, save_report
 
 # ---------------------------------------------------------------------------
@@ -97,15 +96,6 @@ class TestGenerateMarkdownReport:
         """Section 7: Metadata header."""
         result = generate_markdown_report(sample_trade_thesis, sample_market_context)
         assert "## Metadata" in result
-
-    def test_contains_disclaimer(
-        self,
-        sample_trade_thesis: TradeThesis,
-        sample_market_context: MarketContext,
-    ) -> None:
-        """Section 8: Full disclaimer text must appear in the report."""
-        result = generate_markdown_report(sample_trade_thesis, sample_market_context)
-        assert DISCLAIMER_TEXT in result
 
     def test_contains_ticker(
         self,
@@ -263,15 +253,6 @@ class TestGenerateMarkdownReport:
         result = generate_markdown_report(sample_trade_thesis, sample_market_context)
         # The metadata section uses ``` code fences
         assert "```" in result
-
-    def test_disclaimer_is_blockquote(
-        self,
-        sample_trade_thesis: TradeThesis,
-        sample_market_context: MarketContext,
-    ) -> None:
-        """Disclaimer should be in a blockquote (> prefix)."""
-        result = generate_markdown_report(sample_trade_thesis, sample_market_context)
-        assert f"> {DISCLAIMER_TEXT}" in result
 
     def test_conflict_warnings_shown_with_conflicting_signals(
         self,

@@ -10,7 +10,6 @@ from pydantic import ValidationError
 
 from Option_Alpha.agents._parsing import (
     AGENT_RESPONSE_SCHEMA_HINT,
-    DISCLAIMER,
     MAX_RETRIES,
     THESIS_SCHEMA_HINT,
     AgentParsed,
@@ -182,10 +181,6 @@ class TestParsingConstants:
 
     def test_max_retries(self) -> None:
         assert MAX_RETRIES == 2
-
-    def test_disclaimer_not_empty(self) -> None:
-        assert len(DISCLAIMER) > 0
-        assert "educational" in DISCLAIMER.lower() or "not investment" in DISCLAIMER.lower()
 
     def test_agent_response_schema_hint_valid_json_structure(self) -> None:
         assert "agent_role" in AGENT_RESPONSE_SCHEMA_HINT

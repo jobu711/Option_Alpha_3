@@ -82,7 +82,6 @@ def sample_thesis() -> TradeThesis:
         model_used="llama3.1:8b",
         total_tokens=1500,
         duration_ms=3200,
-        disclaimer="This is for educational purposes only. Not investment advice.",
     )
 
 
@@ -358,7 +357,6 @@ class TestAIThesisOperations:
         assert thesis.model_used == sample_thesis.model_used
         assert thesis.total_tokens == sample_thesis.total_tokens
         assert thesis.duration_ms == sample_thesis.duration_ms
-        assert thesis.disclaimer == sample_thesis.disclaimer
 
     @pytest.mark.asyncio()
     async def test_get_debate_history_filter_by_direction(self, repo: Repository) -> None:
@@ -374,7 +372,6 @@ class TestAIThesisOperations:
             model_used="llama3.1:8b",
             total_tokens=1000,
             duration_ms=2000,
-            disclaimer="Not investment advice.",
         )
         bearish_thesis = TradeThesis(
             direction=SignalDirection.BEARISH,
@@ -387,7 +384,6 @@ class TestAIThesisOperations:
             model_used="llama3.1:8b",
             total_tokens=1200,
             duration_ms=2500,
-            disclaimer="Not investment advice.",
         )
         await repo.save_ai_thesis("AAPL", bullish_thesis)
         await repo.save_ai_thesis("AAPL", bearish_thesis)
@@ -418,7 +414,6 @@ class TestAIThesisOperations:
                 model_used="llama3.1:8b",
                 total_tokens=1000 + i * 100,
                 duration_ms=2000 + i * 200,
-                disclaimer="Not investment advice.",
             )
             await repo.save_ai_thesis("AAPL", thesis)
 

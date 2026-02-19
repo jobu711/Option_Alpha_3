@@ -30,7 +30,6 @@ from Option_Alpha.models import (
     TickerScore,
     TradeThesis,
 )
-from Option_Alpha.reporting.disclaimer import DISCLAIMER_TEXT
 from Option_Alpha.web.scan_pipeline import CancelFlag, ScanComplete, ScanProgress
 
 # ---------------------------------------------------------------------------
@@ -254,7 +253,6 @@ async def _scan_async(
                 console.print(
                     f"\n[green]Scan complete: {len(final_scores)} tickers scored[/green]"
                 )
-                console.print(f"\n[dim]{DISCLAIMER_TEXT}[/dim]")
 
 
 def _render_scan_results(
@@ -524,10 +522,6 @@ def _render_debate_report(
         f"Sector: {context.sector}[/dim]"
     )
 
-    # Disclaimer
-    console.print(f"\n[dim]{thesis.disclaimer}[/dim]")
-    console.print(f"[dim]{DISCLAIMER_TEXT}[/dim]")
-
 
 # ---------------------------------------------------------------------------
 # report command
@@ -601,8 +595,6 @@ def _render_terminal_report(ticker: str, thesis: TradeThesis) -> None:
             console.print(f"  - {factor}")
 
     console.print(f"\n[bold]Recommended Action:[/bold]\n{thesis.recommended_action}")
-    console.print(f"\n[dim]{thesis.disclaimer}[/dim]")
-    console.print(f"[dim]{DISCLAIMER_TEXT}[/dim]")
 
 
 def _render_markdown_report(ticker: str, thesis: TradeThesis) -> None:
@@ -654,12 +646,6 @@ def _render_markdown_report(ticker: str, thesis: TradeThesis) -> None:
             "## Recommended Action",
             "",
             thesis.recommended_action,
-            "",
-            "---",
-            "",
-            f"> {thesis.disclaimer}",
-            "",
-            f"> {DISCLAIMER_TEXT}",
             "",
         ]
     )
