@@ -32,14 +32,16 @@ def _load_settings() -> dict[str, str | int]:
     """Load settings from JSON file, falling back to defaults."""
     if SETTINGS_PATH.exists():
         try:
-            data: dict[str, str | int] = json.loads(SETTINGS_PATH.read_text(encoding="utf-8"))
+            data: dict[str, str | int] = json.loads(  # dict-ok: flat JSON config
+                SETTINGS_PATH.read_text(encoding="utf-8")
+            )
             return data
         except (json.JSONDecodeError, OSError):
             logger.warning("Failed to read settings file, using defaults")
     return dict(DEFAULT_SETTINGS)
 
 
-def _save_settings(settings: dict[str, str | int]) -> None:
+def _save_settings(settings: dict[str, str | int]) -> None:  # dict-ok: flat JSON config
     """Persist settings to JSON file, creating parent directories if needed."""
     SETTINGS_PATH.parent.mkdir(parents=True, exist_ok=True)
     SETTINGS_PATH.write_text(json.dumps(settings, indent=2), encoding="utf-8")
