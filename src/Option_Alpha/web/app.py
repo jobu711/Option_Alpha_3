@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.templating import Jinja2Templates
 
 from Option_Alpha.data.database import Database
+from Option_Alpha.logging_config import configure_logging
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +111,7 @@ def create_app() -> FastAPI:
     """Create and configure the FastAPI application."""
     global templates  # noqa: PLW0603
 
-    logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    configure_logging()
 
     app = FastAPI(title="Option Alpha", docs_url=None, redoc_url=None)
 

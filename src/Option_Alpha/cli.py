@@ -23,6 +23,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 from rich.table import Table
 
+from Option_Alpha.logging_config import configure_logging
 from Option_Alpha.models import (
     MarketContext,
     OptionContract,
@@ -44,28 +45,6 @@ app.add_typer(watchlist_app, name="watchlist")
 
 # Rich console for formatted output
 console = Console()
-
-# ---------------------------------------------------------------------------
-# Logging configuration
-# ---------------------------------------------------------------------------
-
-_LOG_FORMAT: str = "%(levelname)s: %(message)s"
-
-
-def _configure_logging(
-    *,
-    verbose: bool = False,
-    quiet: bool = False,
-) -> None:
-    """Configure the root logger based on verbosity flags.
-
-    Args:
-        verbose: Show DEBUG-level messages.
-        quiet: Show only WARNING and above.
-    """
-    level = logging.DEBUG if verbose else logging.WARNING if quiet else logging.INFO
-    logging.basicConfig(level=level, format=_LOG_FORMAT, force=True)
-
 
 # ---------------------------------------------------------------------------
 # Scan cancellation via Ctrl+C
@@ -121,7 +100,7 @@ def scan(
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress info logging")] = False,
 ) -> None:
     """Run the 5-phase scan pipeline on the ticker universe."""
-    _configure_logging(verbose=verbose, quiet=quiet)
+    configure_logging(verbose=verbose, quiet=quiet)
 
     sector_list = [s.strip() for s in sectors.split(",") if s.strip()] if sectors else []
 
@@ -329,7 +308,7 @@ def debate(
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress info logging")] = False,
 ) -> None:
     """Run an AI debate for a specific ticker."""
-    _configure_logging(verbose=verbose, quiet=quiet)
+    configure_logging(verbose=verbose, quiet=quiet)
 
     strike_decimal = Decimal(strike) if strike else None
     expiration_date = datetime.date.fromisoformat(expiration) if expiration else None
@@ -538,7 +517,7 @@ def report(
     quiet: Annotated[bool, typer.Option("--quiet", "-q", help="Suppress info logging")] = False,
 ) -> None:
     """Generate a report from the latest debate history for a ticker."""
-    _configure_logging(verbose=verbose, quiet=quiet)
+    configure_logging(verbose=verbose, quiet=quiet)
     asyncio.run(_report_async(ticker=ticker.upper().strip(), output_format=output_format))
 
 
@@ -665,7 +644,7 @@ def health(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging")] = False,
 ) -> None:
     """Check the health of all external dependencies."""
-    _configure_logging(verbose=verbose)
+    configure_logging(verbose=verbose)
     asyncio.run(_health_async())
 
 
@@ -735,7 +714,7 @@ def universe_refresh(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging")] = False,
 ) -> None:
     """Refresh the CBOE optionable ticker universe."""
-    _configure_logging(verbose=verbose)
+    configure_logging(verbose=verbose)
     asyncio.run(_universe_refresh_async())
 
 
@@ -774,7 +753,7 @@ def universe_list(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging")] = False,
 ) -> None:
     """List tickers in the universe."""
-    _configure_logging(verbose=verbose)
+    configure_logging(verbose=verbose)
     asyncio.run(_universe_list_async(sector=sector, preset=preset))
 
 
@@ -827,7 +806,7 @@ def universe_stats(
     verbose: Annotated[bool, typer.Option("--verbose", "-v", help="Enable debug logging")] = False,
 ) -> None:
     """Display universe summary statistics."""
-    _configure_logging(verbose=verbose)
+    configure_logging(verbose=verbose)
     asyncio.run(_universe_stats_async())
 
 
