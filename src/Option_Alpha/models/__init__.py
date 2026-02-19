@@ -20,7 +20,7 @@ from Option_Alpha.models.enums import (
 from Option_Alpha.models.health import HealthStatus
 from Option_Alpha.models.market_data import OHLCV, Quote, TickerInfo
 from Option_Alpha.models.options import OptionContract, OptionGreeks, OptionSpread, SpreadLeg
-from Option_Alpha.models.scan import ScanRun, TickerScore, WatchlistSummary
+from Option_Alpha.models.scan import ScanRun, TickerScore, UniversePreset, WatchlistSummary
 
 __all__ = [
     # Enums
@@ -46,6 +46,7 @@ __all__ = [
     # Scan
     "ScanRun",
     "TickerScore",
+    "UniversePreset",
     "WatchlistSummary",
     # Health
     "HealthStatus",

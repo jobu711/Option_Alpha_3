@@ -1,0 +1,86 @@
+{% if watchlists is defined and watchlists %}
+<div class="space-y-4">
+  {% for wl in watchlists %}
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg"
+       x-data="{ expanded: false }">
+    <!-- Watchlist Header -->
+    <div class="flex items-center justify-between px-4 py-3 cursor-pointer"
+         @click="expanded = !expanded">
+      <div class="flex items-center gap-3">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-zinc-500 transition-transform"
+             :class="expanded ? 'rotate-90' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"/>
+        </svg>
+        <span class="text-sm font-semibold text-zinc-100">{{ wl.name }}</span>
+        <span class="text-xs text-zinc-500">Created {{ wl.created_at }}</span>
+      </div>
+      <button hx-delete="/watchlists/{{ wl.id }}" hx-target="#watchlist-container" hx-swap="innerHTML"
+              hx-confirm="Delete watchlist '{{ wl.name }}'?"
+              @click.stop
+              class="text-zinc-500 hover:text-red-400 transition-colors p-1 rounded hover:bg-zinc-800">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24"
+             stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Expanded Ticker Section -->
+    <div x-show="expanded" x-transition class="border-t border-zinc-800 px-4 py-3">
+      <!-- Add Ticker Form -->
+      <form hx-post="/watchlists/{{ wl.id }}/tickers" hx-target="#tickers-{{ wl.id }}" hx-swap="innerHTML"
+            class="flex items-end gap-2 mb-3">
+        <input type="text" name="ticker" required placeholder="AAPL"
+               class="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm text-zinc-100
+                      placeholder-zinc-500 focus:outline-none focus:border-emerald-500 uppercase">
+        <button type="submit"
+                class="px-3 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-sm transition-colors">
+          Add
+        </button>
+      </form>
+
+      <!-- Ticker List (fetched on expand) -->
+      <div id="tickers-{{ wl.id }}"
+           hx-get="/watchlists/{{ wl.id }}/tickers" hx-trigger="intersect once" hx-swap="innerHTML">
+        <p class="text-xs text-zinc-500">Loading tickers...</p>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% elif tickers is defined %}
+<!-- Ticker chips for a single watchlist -->
+{% if tickers %}
+<div class="flex flex-wrap gap-2">
+  {% for ticker in tickers %}
+  <span class="inline-flex items-center gap-1 bg-zinc-800 border border-zinc-700 rounded-full px-3 py-1 text-sm">
+    <span class="text-zinc-100 font-medium">{{ ticker }}</span>
+    <button hx-delete="/watchlists/{{ watchlist_id }}/tickers/{{ ticker }}"
+            hx-target="closest div#tickers-{{ watchlist_id }}" hx-swap="innerHTML"
+            class="text-zinc-500 hover:text-red-400 transition-colors ml-1">
+      <svg xmlns="http://www.w3.org/2000/svg" class="h-3 w-3" fill="none" viewBox="0 0 24 24"
+           stroke="currentColor" stroke-width="2">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"/>
+      </svg>
+    </button>
+  </span>
+  {% endfor %}
+</div>
+{% else %}
+<p class="text-xs text-zinc-500">No tickers yet. Add one above.</p>
+{% endif %}
+
+{% else %}
+<!-- Empty state when no watchlists exist -->
+<div class="bg-zinc-900 border border-zinc-800 rounded-lg p-8 text-center">
+  <div class="text-zinc-600 mb-3">
+    <svg class="w-12 h-12 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+            d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z"/>
+    </svg>
+  </div>
+  <p class="text-zinc-400 text-sm">No watchlists yet. Create one to start tracking tickers.</p>
+</div>
+{% endif %}

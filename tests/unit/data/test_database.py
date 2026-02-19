@@ -105,6 +105,7 @@ class TestDatabaseMigrations:
                 "scan_runs",
                 "schema_version",
                 "ticker_scores",
+                "universe_presets",
                 "watchlist_tickers",
                 "watchlists",
             ]
@@ -118,22 +119,26 @@ class TestDatabaseMigrations:
         await db.connect()
         # Running migrations again via _run_migrations should be safe
         await db._run_migrations()
-        # Verify schema_version has exactly one entry (version 1)
+        # Verify schema_version has entries for all migrations (001 + 002)
         cursor = await db.connection.execute("SELECT COUNT(*) FROM schema_version")
         row = await cursor.fetchone()
         assert row is not None
-        assert row[0] == 1
+        assert row[0] == 2
         await db.close()
 
     @pytest.mark.asyncio()
     async def test_schema_version_records_migration(self) -> None:
-        """schema_version should contain an entry for the applied migration."""
+        """schema_version should contain entries for all applied migrations."""
         async with Database(db_path=":memory:") as db:
-            cursor = await db.connection.execute("SELECT version, applied_at FROM schema_version")
+            cursor = await db.connection.execute(
+                "SELECT version, applied_at FROM schema_version ORDER BY version"
+            )
             rows = await cursor.fetchall()
-            assert len(rows) == 1
-            assert rows[0][0] == 1  # version
+            assert len(rows) == 2
+            assert rows[0][0] == 1  # migration 001
             assert rows[0][1] is not None  # applied_at is populated
+            assert rows[1][0] == 2  # migration 002
+            assert rows[1][1] is not None  # applied_at is populated
 
     @pytest.mark.asyncio()
     async def test_indexes_created(self) -> None:

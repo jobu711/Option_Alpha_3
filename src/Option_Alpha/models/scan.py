@@ -1,8 +1,19 @@
-"""Scan models: tracking scan runs, ticker scoring, and watchlist metadata."""
+"""Scan models: tracking scan runs, ticker scoring, watchlist, and preset metadata."""
 
 import datetime
 
 from pydantic import BaseModel, ConfigDict
+
+
+class UniversePreset(BaseModel):
+    """A saved filter preset for the universe browser."""
+
+    model_config = ConfigDict(frozen=True)
+
+    id: int
+    name: str
+    filters: str  # JSON string: {"sectors": [...], "tiers": [...], ...}
+    created_at: str
 
 
 class WatchlistSummary(BaseModel):

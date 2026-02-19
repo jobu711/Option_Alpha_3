@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+
+{% block title %}Watchlists — Option Alpha{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-zinc-100">Watchlists</h1>
+  </div>
+
+  <!-- Create Watchlist Form -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <form hx-post="/watchlists" hx-target="#watchlist-container" hx-swap="innerHTML"
+          class="flex items-end gap-3">
+      <div class="flex-1">
+        <label for="watchlist-name" class="block text-sm font-medium text-zinc-400 mb-1">
+          New Watchlist
+        </label>
+        <input type="text" id="watchlist-name" name="name" required
+               placeholder="e.g. Tech Growth, Earnings Watch"
+               class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm text-zinc-100
+                      placeholder-zinc-500 focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500">
+      </div>
+      <button type="submit"
+              class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm font-medium transition-colors">
+        Create
+      </button>
+    </form>
+  </div>
+
+  <!-- Watchlist List (HTMX swap target) -->
+  <div id="watchlist-container">
+    {% include "partials/watchlist_list.html" %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+
+{% block title %}Universe — Option Alpha{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+  <div class="flex items-center justify-between">
+    <h1 class="text-2xl font-bold text-zinc-100">Universe Browser</h1>
+    <button hx-post="/universe/refresh" hx-target="#universe-groups" hx-swap="innerHTML"
+            class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm
+                   font-medium transition-colors">
+      Refresh Universe
+    </button>
+  </div>
+
+  <!-- Summary Stats Bar -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+      <p class="text-sm text-zinc-500">Total Tickers</p>
+      <p class="text-2xl font-bold text-zinc-100">{{ stats.total }}</p>
+    </div>
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+      <p class="text-sm text-zinc-500">Active</p>
+      <p class="text-2xl font-bold text-emerald-400">{{ stats.active }}</p>
+    </div>
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+      <p class="text-sm text-zinc-500">Inactive</p>
+      <p class="text-2xl font-bold text-zinc-400">{{ stats.inactive }}</p>
+    </div>
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+      <p class="text-sm text-zinc-500">Sectors</p>
+      <p class="text-2xl font-bold text-zinc-100">{{ stats.by_sector | length }}</p>
+    </div>
+  </div>
+
+  <!-- Tier Breakdown -->
+  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+    {% for tier_key, tier_label in tier_labels %}
+    <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-lg px-3 py-2">
+      <p class="text-xs text-zinc-500">{{ tier_label }}</p>
+      <p class="text-lg font-semibold text-zinc-200">{{ stats.by_tier.get(tier_key, 0) }}</p>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- Filter Controls -->
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <div class="flex flex-wrap items-end gap-4">
+      <!-- Sector Filter -->
+      <div class="flex-1 min-w-[160px]">
+        <label for="filter-sector" class="block text-xs font-medium text-zinc-400 mb-1">Sector</label>
+        <select id="filter-sector" name="sector"
+                hx-get="/universe" hx-target="#universe-groups"
+                hx-include="#filter-sector, #filter-tier, #filter-source, #filter-inactive"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm
+                       text-zinc-200 focus:border-emerald-500 focus:outline-none">
+          <option value="">All Sectors</option>
+          {% for s in sectors %}
+          <option value="{{ s }}" {{ 'selected' if current_sector == s else '' }}>{{ s }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Tier Filter -->
+      <div class="flex-1 min-w-[140px]">
+        <label for="filter-tier" class="block text-xs font-medium text-zinc-400 mb-1">Tier</label>
+        <select id="filter-tier" name="tier"
+                hx-get="/universe" hx-target="#universe-groups"
+                hx-include="#filter-sector, #filter-tier, #filter-source, #filter-inactive"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm
+                       text-zinc-200 focus:border-emerald-500 focus:outline-none">
+          <option value="">All Tiers</option>
+          {% for tier_key, tier_label in tier_labels %}
+          <option value="{{ tier_key }}" {{ 'selected' if current_tier == tier_key else '' }}>{{ tier_label }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <!-- Source Filter -->
+      <div class="flex-1 min-w-[120px]">
+        <label for="filter-source" class="block text-xs font-medium text-zinc-400 mb-1">Source</label>
+        <select id="filter-source" name="source"
+                hx-get="/universe" hx-target="#universe-groups"
+                hx-include="#filter-sector, #filter-tier, #filter-source, #filter-inactive"
+                class="w-full bg-zinc-800 border border-zinc-700 rounded-lg px-3 py-2 text-sm
+                       text-zinc-200 focus:border-emerald-500 focus:outline-none">
+          <option value="">All Sources</option>
+          <option value="cboe" {{ 'selected' if current_source == 'cboe' else '' }}>CBOE</option>
+        </select>
+      </div>
+
+      <!-- Inactive Toggle -->
+      <div class="flex items-center gap-2 pb-1">
+        <input type="checkbox" id="filter-inactive" name="show_inactive" value="true"
+               {{ 'checked' if show_inactive else '' }}
+               hx-get="/universe" hx-target="#universe-groups"
+               hx-include="#filter-sector, #filter-tier, #filter-source, #filter-inactive"
+               class="rounded border-zinc-600 bg-zinc-800 text-emerald-500 focus:ring-emerald-500">
+        <label for="filter-inactive" class="text-sm text-zinc-400">Show inactive</label>
+      </div>
+    </div>
+
+    <!-- Preset Controls -->
+    <div class="flex items-center gap-3 mt-4 pt-4 border-t border-zinc-800" x-data="{ showSave: false }">
+      <!-- Load Preset -->
+      {% if presets %}
+      <div class="flex items-center gap-2">
+        <span class="text-xs text-zinc-500">Presets:</span>
+        {% for preset in presets %}
+        <button class="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded hover:border-zinc-600
+                       text-zinc-300 hover:text-zinc-100 transition-colors"
+                @click="
+                  const f = JSON.parse('{{ preset.filters | e }}');
+                  document.getElementById('filter-sector').value = (f.sectors && f.sectors[0]) || '';
+                  document.getElementById('filter-tier').value = (f.tiers && f.tiers[0]) || '';
+                  document.getElementById('filter-source').value = (f.sources && f.sources[0]) || '';
+                  document.getElementById('filter-inactive').checked = f.active_only === false;
+                  htmx.trigger(document.getElementById('filter-sector'), 'change');
+                ">
+          {{ preset.name }}
+          <span class="ml-1 text-zinc-500 hover:text-red-400 cursor-pointer"
+                hx-delete="/universe/presets/{{ preset.id }}" hx-target="#universe-groups"
+                hx-confirm="Delete preset '{{ preset.name }}'?"
+                @click.stop>&times;</span>
+        </button>
+        {% endfor %}
+      </div>
+      {% endif %}
+
+      <!-- Save Preset -->
+      <button @click="showSave = !showSave"
+              class="ml-auto px-3 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded
+                     hover:border-emerald-600 text-zinc-400 hover:text-emerald-400 transition-colors">
+        Save Preset
+      </button>
+
+      <form x-show="showSave" x-transition
+            hx-post="/universe/presets" hx-target="#universe-groups"
+            class="flex items-center gap-2"
+            @htmx:afterRequest="showSave = false">
+        <input type="text" name="name" placeholder="Preset name" required
+               class="px-2 py-1 text-xs bg-zinc-800 border border-zinc-700 rounded text-zinc-200
+                      focus:border-emerald-500 focus:outline-none w-32">
+        <input type="hidden" name="filters" :value="JSON.stringify({
+          sectors: [document.getElementById('filter-sector').value].filter(Boolean),
+          tiers: [document.getElementById('filter-tier').value].filter(Boolean),
+          sources: [document.getElementById('filter-source').value].filter(Boolean),
+          active_only: !document.getElementById('filter-inactive').checked
+        })">
+        <button type="submit"
+                class="px-2 py-1 text-xs bg-emerald-600 hover:bg-emerald-500 text-white rounded
+                       transition-colors">
+          Save
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Filtered Count -->
+  <p class="text-sm text-zinc-500">Showing {{ filtered_count }} ticker{{ 's' if filtered_count != 1 else '' }}</p>
+
+  <!-- Universe Groups -->
+  <div id="universe-groups">
+    {% include "partials/universe_group.html" %}
+  </div>
+</div>
+{% endblock %}
