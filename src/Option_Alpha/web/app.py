@@ -1,7 +1,8 @@
 """FastAPI app factory, Jinja2 config, static files, and custom template filters."""
 
 import logging
-from collections.abc import AsyncGenerator
+import time
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
@@ -9,6 +10,8 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.requests import Request
+from starlette.responses import Response
 from starlette.templating import Jinja2Templates
 
 from Option_Alpha.data.database import Database
@@ -141,6 +144,37 @@ def create_app() -> FastAPI:
     app.include_router(universe.router)
     app.include_router(health.router)
     app.include_router(settings.router)
+
+    # Request logging middleware
+    access_logger = logging.getLogger("Option_Alpha.web.access")
+
+    @app.middleware("http")
+    async def log_requests(
+        request: Request,
+        call_next: Callable[[Request], Awaitable[Response]],
+    ) -> Response:
+        start = time.perf_counter()
+        response = await call_next(request)
+        duration_ms = (time.perf_counter() - start) * 1000
+        path = request.url.path
+
+        if path.startswith("/static") or path == "/api/health":
+            access_logger.debug(
+                "%s %s %s %.0fms",
+                request.method,
+                path,
+                response.status_code,
+                duration_ms,
+            )
+        else:
+            access_logger.info(
+                "%s %s %s %.0fms",
+                request.method,
+                path,
+                response.status_code,
+                duration_ms,
+            )
+        return response
 
     # Static files
     app.mount("/static", StaticFiles(directory=str(_STATIC_DIR)), name="static")
