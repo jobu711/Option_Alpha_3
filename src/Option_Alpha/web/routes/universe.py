@@ -14,6 +14,7 @@ from Option_Alpha.models.market_data import TickerInfo
 from Option_Alpha.services.cache import ServiceCache
 from Option_Alpha.services.rate_limiter import RateLimiter
 from Option_Alpha.services.universe import GICS_SECTORS, UniverseService
+from Option_Alpha.utils.exceptions import DataSourceUnavailableError
 from Option_Alpha.web.app import get_db, templates
 
 logger = logging.getLogger(__name__)
@@ -73,7 +74,7 @@ async def refresh_universe(
 
     try:
         all_tickers = await universe_svc.refresh()
-    except Exception:
+    except DataSourceUnavailableError:
         logger.exception("Universe refresh failed")
         return templates.TemplateResponse(
             "partials/error_message.html",
