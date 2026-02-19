@@ -94,7 +94,7 @@ def signal_color_filter(direction: str | None) -> str:
 
 async def get_db() -> AsyncGenerator[Database]:
     """Async dependency that yields a connected Database and ensures cleanup."""
-    db = Database("data/option_alpha.db")
+    db = Database("data/options.db")
     await db.connect()
     try:
         yield db

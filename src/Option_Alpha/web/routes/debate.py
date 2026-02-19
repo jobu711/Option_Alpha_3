@@ -76,7 +76,7 @@ async def run_debate(
 
     # Build services for fetching market data needed by the orchestrator
     rate_limiter = RateLimiter()
-    cache = ServiceCache()
+    cache = ServiceCache(database=db)
     market_service = MarketDataService(rate_limiter=rate_limiter, cache=cache)
 
     try:
@@ -119,8 +119,8 @@ async def run_debate(
 
     try:
         thesis = await orchestrator.run_debate(context)
-    except Exception:
-        logger.exception("Debate failed for %s", ticker)
+    except Exception as exc:
+        logger.exception("Debate failed for %s", ticker, exc_info=exc)
         return templates.TemplateResponse(
             "partials/debate_content.html",
             {
@@ -147,6 +147,7 @@ async def run_debate(
 async def ticker_ohlcv(
     ticker: str,
     period: str = "6mo",
+    db: Database = Depends(get_db),  # noqa: B008
 ) -> JSONResponse:
     """Return OHLCV data as JSON for Lightweight Charts consumption.
 
@@ -163,7 +164,7 @@ async def ticker_ohlcv(
         )
 
     rate_limiter = RateLimiter()
-    cache = ServiceCache()
+    cache = ServiceCache(database=db)
     service = MarketDataService(rate_limiter=rate_limiter, cache=cache)
 
     try:
