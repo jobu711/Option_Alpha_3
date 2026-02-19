@@ -1,17 +1,32 @@
 {% if error %}
 <!-- Error State -->
-<div class="bg-red-950/30 border border-red-800/50 rounded-lg p-6 text-center">
-  <p class="text-red-300 text-sm">{{ error }}</p>
+<div class="rounded-lg bg-red-950/50 border border-red-800 p-6 text-center">
+  <div class="flex items-start gap-3 justify-center">
+    <svg class="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+    </svg>
+    <div class="text-left">
+      <p class="text-red-400 text-sm font-medium">Debate failed</p>
+      <p class="text-red-300/70 text-xs mt-1">{{ error }}</p>
+    </div>
+  </div>
   {% if ticker %}
   <button hx-post="/debate/{{ ticker }}/run"
           hx-target="#debate-content"
           hx-swap="innerHTML"
           hx-indicator="#debate-loading-retry"
-          class="mt-4 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm font-medium transition-colors">
+          class="mt-4 px-4 py-2 bg-zinc-700 hover:bg-zinc-600 text-zinc-100 rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
     Retry
   </button>
   <div id="debate-loading-retry" class="htmx-indicator mt-3">
-    <span class="text-zinc-400 text-xs">Retrying...</span>
+    <div class="flex items-center justify-center gap-2 text-zinc-400 text-sm">
+      <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
+      Retrying...
+    </div>
   </div>
   {% endif %}
 </div>
@@ -43,34 +58,34 @@
   </div>
 
   <!-- Bull Case -->
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+  <article class="bg-zinc-900 border border-zinc-800 rounded-lg p-5 hover:border-zinc-700 transition-colors">
     <div class="flex items-center gap-2 mb-3">
       <div class="w-2 h-2 rounded-full bg-emerald-400"></div>
       <h3 class="text-sm font-semibold text-emerald-400 uppercase tracking-wide">Bull Case</h3>
     </div>
     <p class="text-sm text-zinc-300 leading-relaxed">{{ thesis.bull_summary }}</p>
-  </div>
+  </article>
 
   <!-- Bear Case -->
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+  <article class="bg-zinc-900 border border-zinc-800 rounded-lg p-5 hover:border-zinc-700 transition-colors">
     <div class="flex items-center gap-2 mb-3">
       <div class="w-2 h-2 rounded-full bg-red-400"></div>
       <h3 class="text-sm font-semibold text-red-400 uppercase tracking-wide">Bear Case</h3>
     </div>
     <p class="text-sm text-zinc-300 leading-relaxed">{{ thesis.bear_summary }}</p>
-  </div>
+  </article>
 
   <!-- Entry Rationale -->
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+  <article class="bg-zinc-900 border border-zinc-800 rounded-lg p-5 hover:border-zinc-700 transition-colors">
     <div class="flex items-center gap-2 mb-3">
       <div class="w-2 h-2 rounded-full bg-blue-400"></div>
       <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wide">Entry Rationale</h3>
     </div>
     <p class="text-sm text-zinc-300 leading-relaxed">{{ thesis.entry_rationale }}</p>
-  </div>
+  </article>
 
   <!-- Risk Factors -->
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-5">
+  <article class="bg-zinc-900 border border-zinc-800 rounded-lg p-5 hover:border-zinc-700 transition-colors">
     <div class="flex items-center gap-2 mb-3">
       <div class="w-2 h-2 rounded-full bg-amber-400"></div>
       <h3 class="text-sm font-semibold text-amber-400 uppercase tracking-wide">Risk Factors</h3>
@@ -83,7 +98,7 @@
       </li>
       {% endfor %}
     </ul>
-  </div>
+  </article>
 
   <!-- Metadata -->
   <div class="flex items-center gap-4 text-xs text-zinc-500 pt-2">
@@ -99,11 +114,17 @@
             hx-target="#debate-content"
             hx-swap="innerHTML"
             hx-indicator="#debate-loading-rerun"
-            class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700">
+            class="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-sm font-medium transition-colors border border-zinc-700 disabled:opacity-50 disabled:cursor-not-allowed">
       Run Again
     </button>
     <div id="debate-loading-rerun" class="htmx-indicator inline-block ml-2">
-      <span class="text-zinc-400 text-xs">Running...</span>
+      <div class="inline-flex items-center gap-2 text-zinc-400 text-xs">
+        <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+          <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        Running...
+      </div>
     </div>
   </div>
   {% endif %}
@@ -112,7 +133,7 @@
 
 {% else %}
 <!-- Fallback: No thesis and no error -->
-<div class="bg-zinc-900 border border-zinc-800 rounded-lg p-8 text-center">
-  <p class="text-zinc-400 text-sm">No debate data available.</p>
-</div>
+{% with empty_message="No debate data available." %}
+  {% include "partials/empty_state.html" %}
+{% endwith %}
 {% endif %}

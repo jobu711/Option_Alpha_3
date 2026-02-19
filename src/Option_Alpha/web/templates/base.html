@@ -18,7 +18,8 @@
 
   <!-- Sidebar -->
   <nav class="sidebar-transition flex flex-col bg-zinc-900 border-r border-zinc-800 h-screen sticky top-0 overflow-y-auto"
-       :class="collapsed ? 'w-16' : 'w-56'">
+       :class="collapsed ? 'w-16' : 'w-56'"
+       aria-label="Sidebar navigation">
 
     <!-- Logo / Collapse Toggle -->
     <div class="flex items-center justify-between px-4 h-14 border-b border-zinc-800">
@@ -26,7 +27,9 @@
             x-show="!collapsed" x-transition>Option Alpha</span>
       <button @click="collapsed = !collapsed"
               class="p-1 rounded hover:bg-zinc-800 text-zinc-400 hover:text-zinc-100 transition-colors"
-              :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'">
+              :title="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+              :aria-label="collapsed ? 'Expand sidebar' : 'Collapse sidebar'"
+              aria-controls="sidebar-nav">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none"
              viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
           <path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"/>
@@ -35,7 +38,7 @@
     </div>
 
     <!-- Navigation Links -->
-    <div class="flex-1 flex flex-col gap-1 px-2 py-3">
+    <div id="sidebar-nav" class="flex-1 flex flex-col gap-1 px-2 py-3" role="navigation" aria-label="Main navigation">
 
       <!-- Dashboard -->
       <a hx-get="/" hx-target="#main-content" hx-push-url="true"
@@ -134,11 +137,13 @@
   <main class="flex-1 overflow-y-auto">
     <!-- Disclaimer Banner -->
     <div x-show="!disclaimerDismissed" x-transition
-         class="bg-amber-950/50 border-b border-amber-800 px-4 py-3">
+         class="bg-amber-950/50 border-b border-amber-800 px-4 py-3"
+         role="alert">
       <div class="flex items-start justify-between max-w-7xl mx-auto">
         <p class="text-amber-200 text-xs leading-relaxed pr-4">{{ disclaimer_text }}</p>
         <button @click="disclaimerDismissed = true; localStorage.setItem('disclaimer_dismissed', 'true')"
-                class="text-amber-400 hover:text-amber-300 shrink-0 text-xs font-medium">
+                class="text-amber-400 hover:text-amber-300 shrink-0 text-xs font-medium transition-colors"
+                aria-label="Dismiss disclaimer">
           Dismiss
         </button>
       </div>

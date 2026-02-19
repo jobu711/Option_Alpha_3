@@ -7,44 +7,52 @@
   <div class="flex items-center justify-between">
     <h1 class="text-2xl font-bold text-zinc-100">Universe Browser</h1>
     <button hx-post="/universe/refresh" hx-target="#universe-groups" hx-swap="innerHTML"
+            hx-indicator="#universe-refresh-spinner"
             class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-sm
-                   font-medium transition-colors">
+                   font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed
+                   flex items-center gap-2">
+      <svg id="universe-refresh-spinner" class="htmx-indicator animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg"
+           fill="none" viewBox="0 0 24 24" aria-hidden="true">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor"
+              d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+      </svg>
       Refresh Universe
     </button>
   </div>
 
   <!-- Summary Stats Bar -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+  <section class="grid grid-cols-2 sm:grid-cols-4 gap-4" aria-label="Universe statistics">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
       <p class="text-sm text-zinc-500">Total Tickers</p>
       <p class="text-2xl font-bold text-zinc-100">{{ stats.total }}</p>
     </div>
-    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
       <p class="text-sm text-zinc-500">Active</p>
       <p class="text-2xl font-bold text-emerald-400">{{ stats.active }}</p>
     </div>
-    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
       <p class="text-sm text-zinc-500">Inactive</p>
       <p class="text-2xl font-bold text-zinc-400">{{ stats.inactive }}</p>
     </div>
-    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
       <p class="text-sm text-zinc-500">Sectors</p>
       <p class="text-2xl font-bold text-zinc-100">{{ stats.by_sector | length }}</p>
     </div>
-  </div>
+  </section>
 
   <!-- Tier Breakdown -->
-  <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+  <section class="grid grid-cols-2 sm:grid-cols-4 gap-3" aria-label="Tier breakdown">
     {% for tier_key, tier_label in tier_labels %}
     <div class="bg-zinc-900/50 border border-zinc-800/50 rounded-lg px-3 py-2">
       <p class="text-xs text-zinc-500">{{ tier_label }}</p>
       <p class="text-lg font-semibold text-zinc-200">{{ stats.by_tier.get(tier_key, 0) }}</p>
     </div>
     {% endfor %}
-  </div>
+  </section>
 
   <!-- Filter Controls -->
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+  <section class="bg-zinc-900 border border-zinc-800 rounded-lg p-4" aria-label="Filter controls">
     <div class="flex flex-wrap items-end gap-4">
       <!-- Sector Filter -->
       <div class="flex-1 min-w-[160px]">
@@ -121,7 +129,8 @@
           <span class="ml-1 text-zinc-500 hover:text-red-400 cursor-pointer"
                 hx-delete="/universe/presets/{{ preset.id }}" hx-target="#universe-groups"
                 hx-confirm="Delete preset '{{ preset.name }}'?"
-                @click.stop>&times;</span>
+                @click.stop
+                aria-label="Delete preset {{ preset.name }}">&times;</span>
         </button>
         {% endfor %}
       </div>
@@ -154,7 +163,7 @@
         </button>
       </form>
     </div>
-  </div>
+  </section>
 
   <!-- Filtered Count -->
   <p class="text-sm text-zinc-500">Showing {{ filtered_count }} ticker{{ 's' if filtered_count != 1 else '' }}</p>

@@ -14,35 +14,35 @@
               hx-get="/scanner/results?sort=rank&direction={% if sort == 'rank' and direction == 'asc' %}desc{% else %}asc{% endif %}"
               hx-target="#scan-results-container"
               hx-swap="innerHTML">
-            Rank {% if sort == 'rank' %}{{ '&#9650;' if direction == 'asc' else '&#9660;' }}{% endif %}
+            Rank {% if sort == 'rank' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
           </th>
           <th class="text-left py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
               scope="col"
               hx-get="/scanner/results?sort=ticker&direction={% if sort == 'ticker' and direction == 'asc' %}desc{% else %}asc{% endif %}"
               hx-target="#scan-results-container"
               hx-swap="innerHTML">
-            Ticker {% if sort == 'ticker' %}{{ '&#9650;' if direction == 'asc' else '&#9660;' }}{% endif %}
+            Ticker {% if sort == 'ticker' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
           </th>
           <th class="text-right py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
               scope="col"
               hx-get="/scanner/results?sort=score&direction={% if sort == 'score' and direction == 'desc' %}asc{% else %}desc{% endif %}"
               hx-target="#scan-results-container"
               hx-swap="innerHTML">
-            Score {% if sort == 'score' %}{{ '&#9650;' if direction == 'asc' else '&#9660;' }}{% endif %}
+            Score {% if sort == 'score' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
           </th>
           <th class="text-right py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
               scope="col"
               hx-get="/scanner/results?sort=rsi&direction={% if sort == 'rsi' and direction == 'desc' %}asc{% else %}desc{% endif %}"
               hx-target="#scan-results-container"
               hx-swap="innerHTML">
-            RSI {% if sort == 'rsi' %}{{ '&#9650;' if direction == 'asc' else '&#9660;' }}{% endif %}
+            RSI {% if sort == 'rsi' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
           </th>
           <th class="text-right py-2 font-medium cursor-pointer hover:text-zinc-300 transition-colors"
               scope="col"
               hx-get="/scanner/results?sort=adx&direction={% if sort == 'adx' and direction == 'desc' %}asc{% else %}desc{% endif %}"
               hx-target="#scan-results-container"
               hx-swap="innerHTML">
-            ADX {% if sort == 'adx' %}{{ '&#9650;' if direction == 'asc' else '&#9660;' }}{% endif %}
+            ADX {% if sort == 'adx' %}<span aria-hidden="true">{{ '&#9650;' if direction == 'asc' else '&#9660;' }}</span>{% endif %}
           </th>
         </tr>
       </thead>

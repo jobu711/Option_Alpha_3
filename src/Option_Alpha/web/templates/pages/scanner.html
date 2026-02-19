@@ -13,7 +13,7 @@
             sse-swap="progress"
             hx-target="#scan-progress-area"
             hx-swap="innerHTML"
-            onclick="this.disabled=true; this.classList.add('opacity-50');
+            onclick="this.disabled=true; this.classList.add('opacity-50', 'cursor-not-allowed');
                      document.getElementById('scan-progress-area').classList.remove('hidden');
                      const src = new EventSource('/scanner/run', {withCredentials: false});
                      const btn = this;
@@ -24,19 +24,19 @@
                        document.getElementById('scan-results-container').innerHTML = e.data;
                        document.getElementById('scan-progress-area').classList.add('hidden');
                        btn.disabled = false;
-                       btn.classList.remove('opacity-50');
+                       btn.classList.remove('opacity-50', 'cursor-not-allowed');
                        src.close();
                      });
                      src.addEventListener('error', function(e) {
                        document.getElementById('scan-progress-area').innerHTML =
-                         '<p class=&quot;text-red-400&quot;>Scan failed or connection lost.</p>';
+                         '<div class=&quot;rounded-lg bg-red-950/50 border border-red-800 p-4&quot;><div class=&quot;flex items-start gap-3&quot;><svg class=&quot;w-5 h-5 text-red-400 shrink-0 mt-0.5&quot; fill=&quot;none&quot; stroke=&quot;currentColor&quot; viewBox=&quot;0 0 24 24&quot; aria-hidden=&quot;true&quot;><path stroke-linecap=&quot;round&quot; stroke-linejoin=&quot;round&quot; stroke-width=&quot;2&quot; d=&quot;M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z&quot;/></svg><div><p class=&quot;text-red-400 text-sm font-medium&quot;>Scan failed</p><p class=&quot;text-red-300/70 text-xs mt-1&quot;>Connection lost or server error. Please try again.</p></div></div></div>';
                        btn.disabled = false;
-                       btn.classList.remove('opacity-50');
+                       btn.classList.remove('opacity-50', 'cursor-not-allowed');
                        src.close();
                      });
                      return false;"
             class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-sm
-                   font-medium rounded-lg transition-colors">
+                   font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
       Run Scan
     </button>
   </div>
@@ -45,19 +45,19 @@
   <div id="scan-progress-area" class="hidden"></div>
 
   <!-- Results Table -->
-  <div id="scan-results-container">
+  <section id="scan-results-container">
     {% if scores %}
     {% include "partials/scan_table.html" %}
     {% else %}
-    <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-8 text-center">
-      <p class="text-zinc-400">No scan results yet. Click "Run Scan" to start.</p>
-    </div>
+    {% with empty_message="No scan results yet. Click \"Run Scan\" to start.", empty_action_url=None %}
+      {% include "partials/empty_state.html" %}
+    {% endwith %}
     {% endif %}
-  </div>
+  </section>
 
   <!-- Scan History -->
   {% if scans %}
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+  <section class="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
     <h2 class="text-lg font-semibold text-zinc-200 mb-4">Scan History</h2>
     <table class="w-full text-sm">
       <thead>
@@ -89,7 +89,7 @@
         {% endfor %}
       </tbody>
     </table>
-  </div>
+  </section>
   {% endif %}
 </div>
 {% endblock %}

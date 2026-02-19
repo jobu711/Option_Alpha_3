@@ -1,0 +1,19 @@
+<div class="rounded-lg bg-red-950/50 border border-red-800 p-4">
+  <div class="flex items-start gap-3">
+    <svg class="w-5 h-5 text-red-400 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+         aria-hidden="true">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z"/>
+    </svg>
+    <div>
+      <p class="text-red-400 text-sm font-medium">{{ title|default("Something went wrong") }}</p>
+      <p class="text-red-300/70 text-xs mt-1">{{ message }}</p>
+      {% if retry_url %}
+      <button hx-get="{{ retry_url }}" hx-target="{{ retry_target|default('closest div') }}"
+              class="mt-2 text-xs text-red-300 underline hover:text-red-200 transition-colors">
+        Try again
+      </button>
+      {% endif %}
+    </div>
+  </div>
+</div>

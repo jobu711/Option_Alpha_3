@@ -1,8 +1,9 @@
 <!-- Scan progress indicator — standalone HTMX/SSE partial -->
-<div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+<div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6" role="status" aria-live="polite">
   <div class="flex items-center gap-4">
     <!-- Spinner -->
-    <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-emerald-400 rounded-full flex-shrink-0"></div>
+    <div class="animate-spin h-5 w-5 border-2 border-zinc-600 border-t-emerald-400 rounded-full flex-shrink-0"
+         aria-hidden="true"></div>
 
     <div class="flex-1">
       <div class="flex items-center justify-between mb-1">
@@ -17,13 +18,15 @@
 
       <!-- Progress bar -->
       {% if progress.total > 5 and progress.current > 0 %}
-      <div class="mt-2 w-full bg-zinc-800 rounded-full h-1.5">
+      <div class="mt-2 w-full bg-zinc-800 rounded-full h-1.5" role="progressbar"
+           aria-valuenow="{{ progress.current }}" aria-valuemin="0" aria-valuemax="{{ progress.total }}">
         <div class="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
              style="width: {{ (progress.current / progress.total * 100)|int }}%"></div>
       </div>
       {% else %}
       <!-- Phase-level progress -->
-      <div class="mt-2 w-full bg-zinc-800 rounded-full h-1.5">
+      <div class="mt-2 w-full bg-zinc-800 rounded-full h-1.5" role="progressbar"
+           aria-valuenow="{{ progress.phase }}" aria-valuemin="0" aria-valuemax="5">
         <div class="bg-emerald-500 h-1.5 rounded-full transition-all duration-300"
              style="width: {{ (progress.phase / 5 * 100)|int }}%"></div>
       </div>

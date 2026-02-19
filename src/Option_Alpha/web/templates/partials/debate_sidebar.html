@@ -3,7 +3,7 @@
 
   <!-- Debate History -->
   {% if debates and debates|length > 0 %}
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
     <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Debate History</h3>
     <div class="space-y-2">
       {% for debate in debates[:5] %}
@@ -13,7 +13,7 @@
           <div class="w-1.5 h-1.5 rounded-full
             {% if debate.direction.value == 'BULLISH' %}bg-emerald-400
             {% elif debate.direction.value == 'BEARISH' %}bg-red-400
-            {% else %}bg-zinc-500{% endif %}"></div>
+            {% else %}bg-zinc-500{% endif %}" aria-hidden="true"></div>
           <span class="text-xs font-medium
             {% if debate.direction.value == 'BULLISH' %}text-emerald-400
             {% elif debate.direction.value == 'BEARISH' %}text-red-400
@@ -30,7 +30,7 @@
 
   <!-- Thesis Details (if available) -->
   {% if thesis %}
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
     <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Analysis Details</h3>
     <dl class="space-y-3 text-sm">
       <div class="flex justify-between">
@@ -63,7 +63,7 @@
   {% endif %}
 
   <!-- Quick Navigate -->
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors">
     <h3 class="text-sm font-semibold text-zinc-400 uppercase tracking-wide mb-3">Quick Debate</h3>
     <form x-data="{ t: '' }"
           @submit.prevent="if (t.trim()) { window.location.href = '/debate/' + t.trim().toUpperCase(); }">
@@ -73,9 +73,11 @@
                placeholder="Ticker"
                class="flex-1 px-3 py-1.5 bg-zinc-800 border border-zinc-700 rounded text-zinc-100
                       placeholder-zinc-500 focus:outline-none focus:border-zinc-500 text-sm uppercase font-mono"
-               maxlength="10">
+               maxlength="10"
+               aria-label="Quick debate ticker symbol">
         <button type="submit"
-                class="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-sm font-medium transition-colors">
+                class="px-3 py-1.5 bg-zinc-700 hover:bg-zinc-600 text-zinc-200 rounded text-sm font-medium transition-colors
+                       disabled:opacity-50 disabled:cursor-not-allowed">
           Go
         </button>
       </div>
@@ -83,7 +85,7 @@
   </div>
 
   <!-- Disclaimer Reminder -->
-  <div class="rounded-lg p-3 bg-amber-950/20 border border-amber-900/30">
+  <div class="rounded-lg p-3 bg-amber-950/20 border border-amber-900/30" role="note">
     <p class="text-amber-300/70 text-xs leading-relaxed">
       This is an educational tool. AI-generated debate results are not investment advice.
       Always do your own research.

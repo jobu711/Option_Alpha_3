@@ -8,7 +8,7 @@
 
   {% if scan %}
   <!-- Latest Scan Summary Card -->
-  <div class="bg-zinc-900 border border-zinc-800 rounded-lg p-6">
+  <section class="bg-zinc-900 border border-zinc-800 rounded-lg p-6 hover:border-zinc-700 transition-colors">
     <div class="flex items-center justify-between mb-4">
       <h2 class="text-lg font-semibold text-zinc-200">Latest Scan</h2>
       <span class="text-sm text-zinc-500">{{ scan.started_at|timeago }}</span>
@@ -59,14 +59,16 @@
       </tbody>
     </table>
     {% endif %}
-  </div>
+  </section>
   {% else %}
   <!-- Empty State -->
-  {% include "partials/empty_state.html" %}
+  {% with empty_message="No scan results yet. Run a scan to get started.", empty_action_url="/scanner", empty_action_label="Run Scan" %}
+    {% include "partials/empty_state.html" %}
+  {% endwith %}
   {% endif %}
 
   <!-- Quick Actions -->
-  <div class="grid grid-cols-3 gap-4">
+  <section class="grid grid-cols-3 gap-4" aria-label="Quick actions">
     <a hx-get="/scanner" hx-target="#main-content" hx-push-url="true"
        class="bg-zinc-900 border border-zinc-800 rounded-lg p-4 hover:border-zinc-700 transition-colors text-center cursor-pointer">
       <p class="text-lg font-semibold text-zinc-100">Run Scan</p>
@@ -82,6 +84,6 @@
       <p class="text-lg font-semibold text-zinc-100">Watchlists</p>
       <p class="text-sm text-zinc-500">Manage your tracked tickers</p>
     </a>
-  </div>
+  </section>
 </div>
 {% endblock %}

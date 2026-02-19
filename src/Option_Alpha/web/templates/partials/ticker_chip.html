@@ -6,16 +6,17 @@
                  bg-zinc-800 border border-zinc-700 text-zinc-200 hover:border-zinc-600 hover:text-zinc-100
                  {% else %}
                  bg-zinc-800/50 border border-zinc-700/50 text-zinc-500 hover:border-zinc-600/50
-                 {% endif %}">
+                 {% endif %}"
+          aria-label="View details for {{ ticker.symbol }}">
     <span>{{ ticker.symbol }}</span>
     {% if ticker.market_cap_tier == 'large_cap' %}
-    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Large Cap"></span>
+    <span class="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Large Cap" aria-hidden="true"></span>
     {% elif ticker.market_cap_tier == 'etf' %}
-    <span class="w-1.5 h-1.5 rounded-full bg-blue-400" title="ETF"></span>
+    <span class="w-1.5 h-1.5 rounded-full bg-blue-400" title="ETF" aria-hidden="true"></span>
     {% elif ticker.market_cap_tier == 'mid_cap' %}
-    <span class="w-1.5 h-1.5 rounded-full bg-amber-400" title="Mid Cap"></span>
+    <span class="w-1.5 h-1.5 rounded-full bg-amber-400" title="Mid Cap" aria-hidden="true"></span>
     {% elif ticker.market_cap_tier == 'small_cap' %}
-    <span class="w-1.5 h-1.5 rounded-full bg-zinc-400" title="Small Cap"></span>
+    <span class="w-1.5 h-1.5 rounded-full bg-zinc-400" title="Small Cap" aria-hidden="true"></span>
     {% endif %}
   </button>
 
@@ -50,7 +51,8 @@
       <div class="relative flex-1" x-data="{ showWl: false }">
         <button @click.stop="showWl = !showWl"
                 class="w-full px-2 py-1 text-xs bg-zinc-700 hover:bg-zinc-600 text-zinc-200
-                       rounded transition-colors">
+                       rounded transition-colors"
+                aria-label="Add {{ ticker.symbol }} to watchlist">
           + Watchlist
         </button>
         <div x-show="showWl" x-transition @click.outside="showWl = false"
