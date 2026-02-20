@@ -4,3 +4,4 @@ __pycache__/
 CLAUDE.md
 workflows/
 nul
+data/logs/

@@ -13,9 +13,11 @@ from __future__ import annotations
 import asyncio
 import datetime
 import logging
+import logging.handlers
 import signal
 import uuid
 from decimal import Decimal
+from pathlib import Path
 from typing import Annotated
 
 import pandas as pd
@@ -52,6 +54,8 @@ console = Console()
 # ---------------------------------------------------------------------------
 
 _LOG_FORMAT: str = "%(levelname)s: %(message)s"
+_FILE_LOG_FORMAT: str = "%(asctime)s %(levelname)-8s %(name)s: %(message)s"
+_LOG_FILE: Path = Path("data/logs/option_alpha.log")
 
 
 def _configure_logging(
@@ -61,12 +65,36 @@ def _configure_logging(
 ) -> None:
     """Configure the root logger based on verbosity flags.
 
+    Console output respects ``--verbose`` / ``--quiet``.  A rotating file
+    handler always captures DEBUG-level output to ``data/logs/option_alpha.log``
+    for post-hoc review.
+
     Args:
-        verbose: Show DEBUG-level messages.
-        quiet: Show only WARNING and above.
+        verbose: Show DEBUG-level messages on the console.
+        quiet: Show only WARNING and above on the console.
     """
     level = logging.DEBUG if verbose else logging.WARNING if quiet else logging.INFO
     logging.basicConfig(level=level, format=_LOG_FORMAT, force=True)
+
+    # Add a persistent file handler (DEBUG, regardless of console level)
+    root = logging.getLogger()
+    already_has_file_handler = any(
+        isinstance(h, logging.handlers.RotatingFileHandler) for h in root.handlers
+    )
+    if not already_has_file_handler:
+        _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        file_handler = logging.handlers.RotatingFileHandler(
+            _LOG_FILE,
+            maxBytes=5_242_880,
+            backupCount=3,
+            encoding="utf-8",
+        )
+        file_handler.setLevel(logging.DEBUG)
+        file_handler.setFormatter(logging.Formatter(_FILE_LOG_FORMAT))
+        root.addHandler(file_handler)
+        # Ensure root logger level allows DEBUG through to the file handler
+        if root.level > logging.DEBUG:
+            root.setLevel(logging.DEBUG)
 
 
 # ---------------------------------------------------------------------------
