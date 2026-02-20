@@ -26,9 +26,11 @@ from Option_Alpha.services._helpers import (
     safe_int,
 )
 from Option_Alpha.services.cache import (
+    DATA_TYPE_FAILURE,
     DATA_TYPE_FUNDAMENTALS,
     DATA_TYPE_OHLCV,
     DATA_TYPE_QUOTE,
+    TTL_FAILURE,
     ServiceCache,
 )
 from Option_Alpha.services.rate_limiter import RateLimiter
@@ -46,8 +48,8 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_PERIOD: Final[str] = "1y"
 
-# Minimum rows required for a valid OHLCV fetch (~200 trading days/year)
-MIN_OHLCV_ROWS: Final[int] = 100
+# Minimum rows required for a valid OHLCV fetch — aligned with SMA-200 requirement
+MIN_OHLCV_ROWS: Final[int] = 200
 
 # yfinance column name mapping (yfinance returns title-cased columns)
 OHLCV_COLUMN_MAP: Final[dict[str, str]] = {
@@ -130,17 +132,36 @@ class MarketDataService:
             logger.debug("Cache hit for OHLCV: %s", cache_key)
             return _deserialize_ohlcv_list(cached)
 
-        # Fetch from yfinance with retry
-        raw_df = await fetch_with_retry(
-            lambda: self._fetch_raw_history(ticker, period),
-            rate_limiter=self._rate_limiter,
-            ticker=ticker,
-            source=YFINANCE_SOURCE,
-            label=f"OHLCV({ticker})",
-        )
+        # Check for a cached failure (avoids re-fetching broken/delisted tickers)
+        failure_key = f"yf:{DATA_TYPE_FAILURE}:{ticker}:ohlcv"
+        cached_failure = await self._cache.get(failure_key)
+        if cached_failure is not None:
+            logger.debug("Cached failure for OHLCV: %s", failure_key)
+            raise TickerNotFoundError(
+                f"Previously failed to fetch OHLCV for '{ticker}' (cached)",
+                ticker=ticker,
+                source=YFINANCE_SOURCE,
+            )
 
-        # Validate
-        self._validate_ohlcv_dataframe(raw_df, ticker, period)
+        try:
+            # Fetch from yfinance with retry
+            raw_df = await fetch_with_retry(
+                lambda: self._fetch_raw_history(ticker, period),
+                rate_limiter=self._rate_limiter,
+                ticker=ticker,
+                source=YFINANCE_SOURCE,
+                label=f"OHLCV({ticker})",
+            )
+
+            # Validate
+            self._validate_ohlcv_dataframe(raw_df, ticker, period)
+        except (TickerNotFoundError, InsufficientDataError) as exc:
+            await self._cache.set(
+                failure_key,
+                json.dumps({"reason": str(exc)}),
+                TTL_FAILURE,
+            )
+            raise
 
         # Normalize column names to known schema (yfinance wrapping rule 3)
         raw_df = raw_df.rename(columns=OHLCV_COLUMN_MAP)

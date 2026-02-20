@@ -506,6 +506,23 @@ class TestCSVParsing:
         assert spy.asset_type == "etf"
         assert msft.asset_type == "equity"
 
+    def test_skips_index_symbols(self, service: UniverseService) -> None:
+        """CBOE index symbols (SPX, VIX, etc.) are filtered out."""
+        csv_text = (
+            "Company Name, Stock Symbol, DPM Name, Post/Station\n"
+            '"Apple Inc.","AAPL","MM LLC","2/1"\n'
+            '"S&P 500 Index","SPX","MM LLC","1/1"\n'
+            '"CBOE Volatility Index","VIX","MM LLC","1/1"\n'
+            '"Russell 2000 Index","RUT","MM LLC","1/1"\n'
+            '"Microsoft Corp","MSFT","MM LLC","2/1"\n'
+        )
+        tickers = service._parse_csv(csv_text)
+        symbols = {t.symbol for t in tickers}
+        assert symbols == {"AAPL", "MSFT"}
+        assert "SPX" not in symbols
+        assert "VIX" not in symbols
+        assert "RUT" not in symbols
+
 
 # ---------------------------------------------------------------------------
 # Constants

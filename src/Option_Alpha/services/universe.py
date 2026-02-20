@@ -122,6 +122,29 @@ _FALLBACK_LARGE_CAPS: Final[frozenset[str]] = frozenset(
     }
 )
 
+# CBOE index symbols that are not tradeable equities — skip during parsing
+_INDEX_SYMBOLS: Final[frozenset[str]] = frozenset(
+    {
+        "DJX",
+        "NDX",
+        "OEX",
+        "RLV",
+        "RUI",
+        "RUT",
+        "SPX",
+        "VIX",
+        "XEO",
+        "XND",
+        "XSP",
+        "SIXB",
+        "SIXI",
+        "SIXM",
+        "SIXRE",
+        "SIXU",
+        "SIXV",
+    }
+)
+
 # GICS sector names (11 standard sectors)
 GICS_SECTORS: Final[list[str]] = [
     "Energy",
@@ -415,6 +438,10 @@ class UniverseService:
 
             # Skip non-equity symbols (those with special characters like '/')
             if not symbol.isalpha():
+                continue
+
+            # Skip CBOE index symbols (no tradeable OHLCV data)
+            if symbol in _INDEX_SYMBOLS:
                 continue
 
             name = (row.get("Company Name") or "").strip()

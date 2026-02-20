@@ -460,3 +460,93 @@ class TestClassifyMarketCap:
     def test_invalid_value_returns_unknown(self) -> None:
         """Non-numeric market cap returns 'Unknown'."""
         assert _classify_market_cap("not_a_number") == "Unknown"
+
+
+# ---------------------------------------------------------------------------
+# Failure caching tests
+# ---------------------------------------------------------------------------
+
+
+class TestFailureCaching:
+    """Tests for OHLCV fetch failure caching."""
+
+    @pytest.mark.asyncio()
+    async def test_ticker_not_found_is_cached(
+        self,
+        service: MarketDataService,
+    ) -> None:
+        """TickerNotFoundError is cached and subsequent calls skip yfinance."""
+        empty_df = pd.DataFrame()
+        with patch.object(
+            service,
+            "_fetch_raw_history",
+            new_callable=AsyncMock,
+            return_value=empty_df,
+        ) as mock_fetch:
+            # First call — fetches from source and caches the failure
+            with pytest.raises(TickerNotFoundError):
+                await service.fetch_ohlcv("FAKE")
+
+            # Second call — should raise from cache without fetching
+            with pytest.raises(TickerNotFoundError, match="cached"):
+                await service.fetch_ohlcv("FAKE")
+
+        # Raw fetch should only be called once
+        mock_fetch.assert_called_once()
+
+    @pytest.mark.asyncio()
+    async def test_insufficient_data_is_cached(
+        self,
+        service: MarketDataService,
+    ) -> None:
+        """InsufficientDataError is cached and subsequent calls skip yfinance."""
+        dates = pd.date_range("2024-01-01", periods=50, freq="B", tz="US/Eastern")
+        short_df = pd.DataFrame(
+            {
+                "Open": [150.0] * 50,
+                "High": [151.0] * 50,
+                "Low": [149.0] * 50,
+                "Close": [150.5] * 50,
+                "Volume": [50_000_000] * 50,
+            },
+            index=dates,
+        )
+        with patch.object(
+            service,
+            "_fetch_raw_history",
+            new_callable=AsyncMock,
+            return_value=short_df,
+        ) as mock_fetch:
+            # First call — fetches and caches the failure
+            with pytest.raises(InsufficientDataError):
+                await service.fetch_ohlcv("LOWVOL")
+
+            # Second call — should raise TickerNotFoundError from cache
+            with pytest.raises(TickerNotFoundError, match="cached"):
+                await service.fetch_ohlcv("LOWVOL")
+
+        mock_fetch.assert_called_once()
+
+    @pytest.mark.asyncio()
+    async def test_data_source_unavailable_not_cached(
+        self,
+        service: MarketDataService,
+    ) -> None:
+        """DataSourceUnavailableError is NOT cached (transient failure)."""
+        with patch.object(
+            service,
+            "_fetch_raw_history",
+            new_callable=AsyncMock,
+            side_effect=ConnectionError("network down"),
+        ) as mock_fetch:
+            with pytest.raises(DataSourceUnavailableError):
+                await service.fetch_ohlcv("AAPL")
+
+            call_count_after_first = mock_fetch.call_count
+
+            # Second call — should also try to fetch (not cached)
+            with pytest.raises(DataSourceUnavailableError):
+                await service.fetch_ohlcv("AAPL")
+
+        # fetch_with_retry retries 3 times per call; both calls should attempt
+        assert mock_fetch.call_count > call_count_after_first
