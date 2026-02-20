@@ -1,154 +1,94 @@
-"""Tests for the BearAgent.
+"""Tests for the bear PydanticAI agent.
 
-Verifies that the bear agent receives the bull's analysis, produces a
-valid bearish AgentResponse, handles token metadata, and retries on
-parse failures -- all with a mocked LLMClient.
+Verifies that ``run_bear()`` returns a properly typed ``(AgentParsed, RunUsage)``
+tuple using PydanticAI's ``TestModel``.  The bear agent receives the bull's
+analysis as an additional dependency.
 """
 
 from __future__ import annotations
 
-import json
-from unittest.mock import AsyncMock
-
 import pytest
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.usage import RunUsage
 
-from Option_Alpha.agents.bear import BearAgent
-from Option_Alpha.agents.llm_client import LLMClient, LLMResponse
-from Option_Alpha.models import AgentResponse, GreeksCited, MarketContext
-
-# ---------------------------------------------------------------------------
-# Mock data
-# ---------------------------------------------------------------------------
-
-MOCK_BEAR_JSON: str = json.dumps(
-    {
-        "agent_role": "bear",
-        "analysis": "Elevated IV rank at 45 and proximity to 52-week high suggest limited upside.",
-        "key_points": [
-            "Price near 52-week high of $199.62 limits upside potential",
-            "Theta decay at -$0.08/day erodes position value",
-            "Earnings in 37 DTE introduces IV crush risk",
-        ],
-        "conviction": 0.55,
-        "contracts_referenced": ["AAPL 185 call 2025-02-21"],
-        "greeks_cited": {
-            "delta": 0.45,
-            "theta": -0.08,
-            "vega": None,
-            "gamma": None,
-            "rho": None,
-        },
-    }
-)
-
-
-def _make_bear_llm_response(content: str = MOCK_BEAR_JSON) -> LLMResponse:
-    return LLMResponse(
-        content=content,
-        model="llama3.1:8b",
-        input_tokens=600,
-        output_tokens=250,
-        duration_ms=3500,
-    )
-
-
-def _make_bull_agent_response() -> AgentResponse:
-    """Create a sample bull AgentResponse to pass to the bear agent."""
-    return AgentResponse(
-        agent_role="bull",
-        analysis="RSI at 55 suggests room for upward momentum.",
-        key_points=["RSI neutral-to-bullish", "IV moderate"],
-        conviction=0.65,
-        contracts_referenced=["AAPL 185 call 2025-02-21"],
-        greeks_cited=GreeksCited(delta=0.45, theta=-0.08),
-        model_used="llama3.1:8b",
-        input_tokens=500,
-        output_tokens=200,
-    )
-
+from Option_Alpha.agents._parsing import AgentParsed
+from Option_Alpha.agents.bear import BearDeps, run_bear
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 
-class TestBearAgent:
-    """Tests for BearAgent.run()."""
+class TestRunBear:
+    """Tests for run_bear() with PydanticAI TestModel."""
 
     @pytest.mark.asyncio()
-    async def test_bear_run_success(self, sample_market_context: MarketContext) -> None:
-        """Mock LLM returns valid bear JSON -> AgentResponse with role='bear'."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_bear_llm_response())
+    async def test_returns_agent_parsed(self) -> None:
+        """run_bear() returns an AgentParsed instance as the first element."""
+        model = TestModel()
+        deps = BearDeps(
+            context_text="Ticker: AAPL\nPrice: $186.75\nIV Rank: 45.2",
+            bull_argument="RSI at 55 suggests room for upward momentum.",
+        )
+        parsed, _usage = await run_bear(deps, model)
 
-        agent = BearAgent(mock_llm)
-        result = await agent.run(sample_market_context, _make_bull_agent_response())
-
-        assert isinstance(result, AgentResponse)
-        assert result.agent_role == "bear"
-
-    @pytest.mark.asyncio()
-    async def test_bear_receives_bull_analysis(self, sample_market_context: MarketContext) -> None:
-        """Verify bear prompt includes the bull's analysis text."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_bear_llm_response())
-
-        bull_resp = _make_bull_agent_response()
-        agent = BearAgent(mock_llm)
-        await agent.run(sample_market_context, bull_resp)
-
-        # The first call's first arg is the messages list
-        call_args = mock_llm.chat.call_args_list[0]
-        messages = call_args[0][0]
-        user_msg_content = messages[1].content
-        assert bull_resp.analysis in user_msg_content
+        assert isinstance(parsed, AgentParsed)
 
     @pytest.mark.asyncio()
-    async def test_bear_conviction_range(self, sample_market_context: MarketContext) -> None:
-        """Conviction preserved from LLM output."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_bear_llm_response())
+    async def test_returns_run_usage(self) -> None:
+        """run_bear() returns a RunUsage instance as the second element."""
+        model = TestModel()
+        deps = BearDeps(
+            context_text="Ticker: AAPL\nPrice: $186.75",
+            bull_argument="Bull case text",
+        )
+        _parsed, usage = await run_bear(deps, model)
 
-        agent = BearAgent(mock_llm)
-        result = await agent.run(sample_market_context, _make_bull_agent_response())
-
-        assert result.conviction == pytest.approx(0.55, abs=0.01)
-
-    @pytest.mark.asyncio()
-    async def test_bear_token_counts(self, sample_market_context: MarketContext) -> None:
-        """Tokens passed through from LLMResponse."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_bear_llm_response())
-
-        agent = BearAgent(mock_llm)
-        result = await agent.run(sample_market_context, _make_bull_agent_response())
-
-        assert result.input_tokens == 600
-        assert result.output_tokens == 250
+        assert isinstance(usage, RunUsage)
 
     @pytest.mark.asyncio()
-    async def test_bear_parse_failure_retries(self, sample_market_context: MarketContext) -> None:
-        """First response bad JSON, second good -> succeeds."""
-        bad_resp = _make_bear_llm_response("invalid json")
-        good_resp = _make_bear_llm_response(MOCK_BEAR_JSON)
+    async def test_usage_has_non_negative_tokens(self) -> None:
+        """Token counts in RunUsage are non-negative integers."""
+        model = TestModel()
+        deps = BearDeps(context_text="test context", bull_argument="bull text")
+        _parsed, usage = await run_bear(deps, model)
 
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(side_effect=[bad_resp, good_resp])
-
-        agent = BearAgent(mock_llm)
-        result = await agent.run(sample_market_context, _make_bull_agent_response())
-
-        assert result.agent_role == "bear"
-        assert mock_llm.chat.call_count == 2
+        assert isinstance(usage.total_tokens, int)
+        assert usage.total_tokens >= 0
+        assert usage.input_tokens >= 0
+        assert usage.output_tokens >= 0
 
     @pytest.mark.asyncio()
-    async def test_bear_all_retries_fail(self, sample_market_context: MarketContext) -> None:
-        """All attempts fail -> raises exception."""
-        bad_resp = _make_bear_llm_response("garbage")
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=bad_resp)
+    async def test_parsed_has_required_fields(self) -> None:
+        """AgentParsed output has all required fields populated."""
+        model = TestModel()
+        deps = BearDeps(
+            context_text="Ticker: AAPL\nRSI(14): 55.3",
+            bull_argument="RSI suggests bullish momentum.",
+        )
+        parsed, _usage = await run_bear(deps, model)
 
-        agent = BearAgent(mock_llm)
+        assert isinstance(parsed.agent_role, str)
+        assert isinstance(parsed.analysis, str)
+        assert isinstance(parsed.key_points, list)
+        assert isinstance(parsed.conviction, float)
+        assert isinstance(parsed.contracts_referenced, list)
 
-        with pytest.raises(Exception):  # noqa: B017, PT011
-            await agent.run(sample_market_context, _make_bull_agent_response())
+    @pytest.mark.asyncio()
+    async def test_bear_deps_requires_bull_argument(self) -> None:
+        """BearDeps requires both context_text and bull_argument."""
+        deps = BearDeps(
+            context_text="Ticker: AAPL",
+            bull_argument="The bull made this case.",
+        )
+        assert deps.context_text == "Ticker: AAPL"
+        assert deps.bull_argument == "The bull made this case."
+
+    @pytest.mark.asyncio()
+    async def test_usage_requests_at_least_one(self) -> None:
+        """At least one request is made to the model."""
+        model = TestModel()
+        deps = BearDeps(context_text="Ticker: AAPL", bull_argument="bull text")
+        _parsed, usage = await run_bear(deps, model)
+
+        assert usage.requests >= 1

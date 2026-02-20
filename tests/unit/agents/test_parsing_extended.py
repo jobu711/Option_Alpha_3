@@ -1,6 +1,8 @@
-"""Extended parsing tests: _extract_json direct tests, prompt_to_chat, AgentParsed model.
+"""Extended parsing tests: AgentParsed model tests and DISCLAIMER constant.
 
-These functions were only tested indirectly through parse_with_retry.
+Tests for deleted functions (_extract_json, prompt_to_chat, MAX_RETRIES, schema
+hints) have been removed since those functions no longer exist in the PydanticAI
+version of _parsing.py.
 """
 
 from __future__ import annotations
@@ -8,101 +10,8 @@ from __future__ import annotations
 import pytest
 from pydantic import ValidationError
 
-from Option_Alpha.agents._parsing import (
-    AGENT_RESPONSE_SCHEMA_HINT,
-    DISCLAIMER,
-    MAX_RETRIES,
-    THESIS_SCHEMA_HINT,
-    AgentParsed,
-    _extract_json,
-    prompt_to_chat,
-)
-from Option_Alpha.agents.llm_client import ChatMessage
-from Option_Alpha.agents.prompts.bull_prompt import PromptMessage
+from Option_Alpha.agents._parsing import DISCLAIMER, AgentParsed
 from Option_Alpha.models import GreeksCited
-
-# ---------------------------------------------------------------------------
-# _extract_json — direct tests
-# ---------------------------------------------------------------------------
-
-
-class TestExtractJson:
-    """Direct tests for the _extract_json private function."""
-
-    def test_plain_json_passthrough(self) -> None:
-        raw = '{"key": "val"}'
-        assert _extract_json(raw) == '{"key": "val"}'
-
-    def test_strips_whitespace(self) -> None:
-        raw = '   {"key": "val"}   '
-        assert _extract_json(raw) == '{"key": "val"}'
-
-    def test_json_fence_with_language_tag(self) -> None:
-        raw = '```json\n{"key": "val"}\n```'
-        assert _extract_json(raw) == '{"key": "val"}'
-
-    def test_json_fence_without_language_tag(self) -> None:
-        raw = '```\n{"key": "val"}\n```'
-        assert _extract_json(raw) == '{"key": "val"}'
-
-    def test_inner_whitespace_stripped(self) -> None:
-        raw = '```json\n  {"spaced": true}  \n```'
-        assert _extract_json(raw) == '{"spaced": true}'
-
-    def test_preamble_and_suffix_ignored(self) -> None:
-        raw = 'Here is my response:\n```json\n{"key": "val"}\n```\nHope that helps!'
-        assert _extract_json(raw) == '{"key": "val"}'
-
-    def test_empty_fence_returns_empty_string(self) -> None:
-        raw = "```json\n\n```"
-        assert _extract_json(raw) == ""
-
-    def test_unclosed_fence_returns_stripped_raw(self) -> None:
-        raw = '```json\n{"unclosed"}'
-        assert _extract_json(raw) == '```json\n{"unclosed"}'
-
-    def test_first_fence_extracted_when_multiple(self) -> None:
-        raw = '```json\n{"first": 1}\n```\nMore text\n```json\n{"second": 2}\n```'
-        result = _extract_json(raw)
-        assert '"first"' in result
-
-
-# ---------------------------------------------------------------------------
-# prompt_to_chat — direct tests
-# ---------------------------------------------------------------------------
-
-
-class TestPromptToChat:
-    """Direct tests for prompt_to_chat conversion."""
-
-    def test_empty_list(self) -> None:
-        result = prompt_to_chat([])
-        assert result == []
-
-    def test_single_system_message(self) -> None:
-        pm = PromptMessage(role="system", content="You are a bull agent.")
-        result = prompt_to_chat([pm])
-        assert len(result) == 1
-        assert isinstance(result[0], ChatMessage)
-        assert result[0].role == "system"
-        assert result[0].content == "You are a bull agent."
-
-    def test_system_and_user_messages(self) -> None:
-        messages = [
-            PromptMessage(role="system", content="System prompt"),
-            PromptMessage(role="user", content="User input"),
-        ]
-        result = prompt_to_chat(messages)
-        assert len(result) == 2
-        assert result[0].role == "system"
-        assert result[1].role == "user"
-
-    def test_preserves_content_exactly(self) -> None:
-        content = "Special chars: <tag> & 'quotes' \"double\""
-        pm = PromptMessage(role="user", content=content)
-        result = prompt_to_chat([pm])
-        assert result[0].content == content
-
 
 # ---------------------------------------------------------------------------
 # AgentParsed model tests
@@ -180,17 +89,6 @@ class TestAgentParsed:
 class TestParsingConstants:
     """Verify module-level constants are defined correctly."""
 
-    def test_max_retries(self) -> None:
-        assert MAX_RETRIES == 2
-
     def test_disclaimer_not_empty(self) -> None:
         assert len(DISCLAIMER) > 0
         assert "educational" in DISCLAIMER.lower() or "not investment" in DISCLAIMER.lower()
-
-    def test_agent_response_schema_hint_valid_json_structure(self) -> None:
-        assert "agent_role" in AGENT_RESPONSE_SCHEMA_HINT
-        assert "conviction" in AGENT_RESPONSE_SCHEMA_HINT
-
-    def test_thesis_schema_hint_valid_json_structure(self) -> None:
-        assert "direction" in THESIS_SCHEMA_HINT
-        assert "risk_factors" in THESIS_SCHEMA_HINT

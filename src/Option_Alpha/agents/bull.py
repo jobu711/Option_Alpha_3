@@ -39,6 +39,7 @@ bull_agent: Agent[BullDeps, AgentParsed] = Agent(
     "openai:llama3.1:8b",  # placeholder — overridden at runtime via model param
     output_type=AgentParsed,
     retries=2,
+    defer_model_check=True,
 )
 
 
