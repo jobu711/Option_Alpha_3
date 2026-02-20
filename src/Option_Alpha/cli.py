@@ -95,6 +95,8 @@ def _configure_logging(
         # Ensure root logger level allows DEBUG through to the file handler
         if root.level > logging.DEBUG:
             root.setLevel(logging.DEBUG)
+        # Silence noisy third-party loggers
+        logging.getLogger("aiosqlite").setLevel(logging.INFO)
 
 
 # ---------------------------------------------------------------------------
