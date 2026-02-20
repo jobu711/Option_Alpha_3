@@ -8,6 +8,8 @@ This is a private module — not exported from ``agents/__init__.py``.
 
 from __future__ import annotations
 
+import re
+
 from pydantic import BaseModel, ConfigDict
 
 from Option_Alpha.models import GreeksCited, SignalDirection
@@ -17,6 +19,14 @@ from Option_Alpha.models import GreeksCited, SignalDirection
 # ---------------------------------------------------------------------------
 
 DISCLAIMER: str = "This is for educational purposes only. Not investment advice."
+
+_THINK_TAG_RE: re.Pattern[str] = re.compile(r"<think>.*?</think>", re.DOTALL)
+"""Matches ``<think>…</think>`` reasoning tags some models emit."""
+
+
+def has_think_tags(text: str) -> bool:
+    """Return ``True`` if *text* contains ``<think>`` tag content."""
+    return bool(_THINK_TAG_RE.search(text))
 
 
 # ---------------------------------------------------------------------------

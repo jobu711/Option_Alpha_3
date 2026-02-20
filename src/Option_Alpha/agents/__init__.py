@@ -6,6 +6,7 @@ from Option_Alpha.agents.fallback import build_fallback_thesis
 from Option_Alpha.agents.model_config import (
     DEFAULT_HOST,
     DEFAULT_MODEL,
+    DEFAULT_MODEL_SETTINGS,
     build_ollama_model,
     validate_model_available,
 )
@@ -16,6 +17,7 @@ __all__ = [
     "DISCLAIMER",
     "DEFAULT_HOST",
     "DEFAULT_MODEL",
+    "DEFAULT_MODEL_SETTINGS",
     "DebateOrchestrator",
     "build_context_text",
     "build_fallback_thesis",
