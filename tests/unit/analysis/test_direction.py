@@ -26,8 +26,8 @@ class TestDetermineDirectionADXGating:
         [
             (0.0, 20.0, 1.0),  # strongly bullish signals, but no trend
             (10.0, 80.0, -1.0),  # strongly bearish signals, but no trend
-            (19.9, 50.0, 0.0),  # just below threshold, neutral signals
-            (19.99, 25.0, 0.8),  # barely below threshold, bullish signals
+            (14.9, 50.0, 0.0),  # just below threshold, neutral signals
+            (14.99, 25.0, 0.8),  # barely below threshold, bullish signals
         ],
         ids=[
             "adx_zero_bullish_signals",
@@ -46,7 +46,7 @@ class TestDetermineDirectionADXGating:
         assert result == SignalDirection.NEUTRAL
 
     def test_adx_exactly_at_threshold_is_not_neutral(self) -> None:
-        """ADX == 20.0 is NOT below threshold, so scoring proceeds."""
+        """ADX == 15.0 is NOT below threshold, so scoring proceeds."""
         # RSI < 30 (bullish +1) and SMA > 0.5 (bullish +1) -> BULLISH
         result = determine_direction(adx=ADX_TREND_THRESHOLD, rsi=25.0, sma_alignment=0.8)
         assert result == SignalDirection.BULLISH

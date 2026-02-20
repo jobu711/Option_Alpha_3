@@ -484,10 +484,9 @@ async def _scan_async(
                     # Options-specific indicators (iv_rank, iv_percentile,
                     # put_call_ratio, max_pain) are omitted here because they
                     # require historical IV / options chain data not available
-                    # from basic OHLCV.  The normalization pipeline assigns
-                    # DEFAULT_PERCENTILE (50.0) to any missing indicator
-                    # automatically, which is cleaner than hard-coding placeholders
-                    # that would be indistinguishable from real data.
+                    # from basic OHLCV.  The normalization pipeline excludes
+                    # universally-missing indicators entirely, so composite_score()
+                    # renormalizes the remaining weights automatically.
 
                     if indicators:
                         universe_indicators[ticker_sym] = indicators

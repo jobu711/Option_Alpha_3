@@ -54,7 +54,6 @@ DTE_MAX: Final[int] = 60
 # Contract filtering thresholds
 MIN_OPEN_INTEREST: Final[int] = 100
 MIN_VOLUME: Final[int] = 1
-MAX_SPREAD_RATIO: Final[float] = 0.30  # spread <= 30% of mid price
 # Greek validation boundaries (same as model, used for pre-filter)
 DELTA_FLOOR: Final[float] = -1.0
 DELTA_CEILING: Final[float] = 1.0
@@ -354,11 +353,13 @@ class OptionsDataService:
             bid = safe_decimal(row.get("bid"))
             ask = safe_decimal(row.get("ask"))
 
-            # Flag zero bid/ask as illiquid -- skip
-            # Zero bid means no market maker willing to buy
-            if bid == Decimal("0"):
+            # Skip truly dead contracts where both bid AND ask are zero.
+            # Contracts with bid=0 but ask>0 are passed through so the
+            # analysis layer can evaluate them (yfinance often returns
+            # bid=0 for contracts that are still tradeable via limit orders).
+            if bid == Decimal("0") and ask == Decimal("0"):
                 logger.debug(
-                    "Skipping illiquid contract %s strike %s: zero bid",
+                    "Skipping dead contract %s strike %s: both bid and ask zero",
                     ticker,
                     row.get("strike"),
                 )
@@ -425,12 +426,15 @@ class OptionsDataService:
     def _filter_contracts(
         contracts: list[OptionContract],
     ) -> list[OptionContract]:
-        """Apply liquidity filters to contracts.
+        """Apply basic liquidity filters to contracts.
 
         Filters:
         - Open interest >= MIN_OPEN_INTEREST (100)
         - Volume >= MIN_VOLUME (1)
-        - Spread <= MAX_SPREAD_RATIO (30%) of mid price
+
+        Spread filtering is handled by the analysis layer
+        (``contracts.filter_contracts``), which can apply zero-bid
+        exemptions and business-logic-aware spread checks.
 
         Delta filtering is intentionally NOT done here so the analysis
         layer's BSM fallback can compute Greeks for contracts that lack
@@ -445,16 +449,6 @@ class OptionsDataService:
 
             # Volume filter
             if contract.volume < MIN_VOLUME:
-                continue
-
-            # Spread ratio filter -- avoid div by zero
-            mid = contract.mid
-            if mid > Decimal("0"):
-                spread_ratio = float(contract.spread / mid)
-                if spread_ratio > MAX_SPREAD_RATIO:
-                    continue
-            elif contract.spread > Decimal("0"):
-                # Mid is zero but there's a spread -- illiquid
                 continue
 
             filtered.append(contract)

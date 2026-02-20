@@ -11,7 +11,7 @@ from Option_Alpha.models.enums import SignalDirection
 logger = logging.getLogger(__name__)
 
 # --- Thresholds ---
-ADX_TREND_THRESHOLD: float = 20.0
+ADX_TREND_THRESHOLD: float = 15.0
 RSI_OVERBOUGHT: float = 70.0
 RSI_OVERSOLD: float = 30.0
 SMA_BULLISH_THRESHOLD: float = 0.5

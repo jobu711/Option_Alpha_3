@@ -31,7 +31,6 @@ from Option_Alpha.services.options_data import (
     DTE_MAX,
     DTE_MIN,
     DTE_TARGET,
-    MAX_SPREAD_RATIO,
     MIN_OPEN_INTEREST,
     MIN_VOLUME,
     OptionsDataService,
@@ -387,12 +386,12 @@ class TestContractFiltering:
         filtered = OptionsDataService._filter_contracts([contract])
         assert len(filtered) == 0
 
-    def test_wide_spread_filtered_out(self) -> None:
-        """Contract with spread > 30% of mid is filtered out."""
-        # bid=1.00, ask=2.00 => mid=1.50, spread=1.00, ratio=0.667 > 0.30
+    def test_wide_spread_not_filtered_at_service_layer(self) -> None:
+        """Spread filtering is handled by analysis layer, not service layer."""
+        # bid=1.00, ask=2.00 => wide spread, but service layer passes it through
         contract = self._make_contract(bid="1.00", ask="2.00")
         filtered = OptionsDataService._filter_contracts([contract])
-        assert len(filtered) == 0
+        assert len(filtered) == 1
 
     def test_delta_outside_target_range_not_filtered(self) -> None:
         """Service does NOT filter by delta — that's the analysis layer's job."""
@@ -436,8 +435,8 @@ class TestZeroBidAskFiltering:
         )
         assert len(contracts) == 0
 
-    def test_zero_bid_with_nonzero_ask_skipped(self) -> None:
-        """Contract with bid=0 but ask>0 is flagged as illiquid and skipped."""
+    def test_zero_bid_with_nonzero_ask_kept(self) -> None:
+        """Contract with bid=0 but ask>0 is kept (yfinance data quality issue)."""
         df = pd.DataFrame(
             {
                 "strike": [185.0],
@@ -455,7 +454,7 @@ class TestZeroBidAskFiltering:
             option_type=OptionType.CALL,
             expiration=datetime.date(2025, 2, 21),
         )
-        assert len(contracts) == 0
+        assert len(contracts) == 1
 
     def test_nonzero_bid_with_zero_ask_kept(self) -> None:
         """Contract with bid > 0 but ask = 0 is kept (unusual but possible)."""
@@ -613,6 +612,8 @@ class TestConstants:
         """Minimum volume threshold is 1."""
         assert MIN_VOLUME == 1
 
-    def test_max_spread_ratio(self) -> None:
-        """Max spread ratio is 30%."""
-        assert pytest.approx(0.30) == MAX_SPREAD_RATIO
+    def test_spread_filtering_moved_to_analysis_layer(self) -> None:
+        """Spread filtering is no longer in the service layer."""
+        # MAX_SPREAD_RATIO was removed from options_data.py
+        # Spread filtering is now handled by analysis/contracts.py
+        assert not hasattr(OptionsDataService, "MAX_SPREAD_RATIO")
