@@ -1,25 +1,20 @@
-"""Extended prompt builder tests: content validation, empty inputs, PromptMessage model.
+"""Extended prompt constant tests: content validation, keyword coverage, and schema completeness.
 
 Verifies system prompt content descriptions, role keywords, constraint text,
-and edge cases with empty or special-character inputs.
+and JSON output schema completeness for all three agent prompts.
+
+Builder function tests (build_*_messages) and PromptMessage model tests have
+been removed since those functions no longer exist in the PydanticAI version.
 """
 
 from __future__ import annotations
 
-import pytest
-from pydantic import ValidationError
-
 from Option_Alpha.agents.prompts import (
-    PromptMessage,
-    build_bear_messages,
-    build_bull_messages,
-    build_risk_messages,
+    BEAR_SYSTEM_PROMPT,
+    BULL_SYSTEM_PROMPT,
+    PROMPT_VERSION,
+    RISK_SYSTEM_PROMPT,
 )
-
-CONTEXT: str = "Ticker: AAPL\nCurrent Price: $186.75\nIV Rank: 45.2"
-BULL_ANALYSIS: str = "RSI suggests upward momentum."
-BEAR_ANALYSIS: str = "IV is elevated."
-
 
 # ---------------------------------------------------------------------------
 # Bull prompt content
@@ -30,32 +25,32 @@ class TestBullPromptContent:
     """Verify bull system prompt contains required role descriptions."""
 
     def test_system_prompt_contains_bullish_keyword(self) -> None:
-        msgs = build_bull_messages(CONTEXT)
-        system = msgs[0].content.lower()
-        assert "bull" in system
+        lower = BULL_SYSTEM_PROMPT.lower()
+        assert "bull" in lower
 
     def test_system_prompt_contains_conviction(self) -> None:
-        msgs = build_bull_messages(CONTEXT)
-        system = msgs[0].content.lower()
-        assert "conviction" in system
+        lower = BULL_SYSTEM_PROMPT.lower()
+        assert "conviction" in lower
 
     def test_system_prompt_contains_json_instruction(self) -> None:
-        msgs = build_bull_messages(CONTEXT)
-        system = msgs[0].content.lower()
-        assert "json" in system
+        lower = BULL_SYSTEM_PROMPT.lower()
+        assert "json" in lower
 
-    def test_empty_context(self) -> None:
-        """Empty context still wraps in user_input tags."""
-        msgs = build_bull_messages("")
-        user = msgs[1].content
-        assert "<user_input>" in user
-        assert "</user_input>" in user
+    def test_system_prompt_contains_version(self) -> None:
+        assert PROMPT_VERSION in BULL_SYSTEM_PROMPT
 
-    def test_special_characters_not_escaped(self) -> None:
-        """Context with XML-like characters is injected verbatim."""
-        context = "Price: <$185 & IV > 30%"
-        msgs = build_bull_messages(context)
-        assert context in msgs[1].content
+    def test_system_prompt_contains_key_points_field(self) -> None:
+        assert "key_points" in BULL_SYSTEM_PROMPT
+
+    def test_system_prompt_contains_contracts_referenced_field(self) -> None:
+        assert "contracts_referenced" in BULL_SYSTEM_PROMPT
+
+    def test_system_prompt_contains_greeks_cited_field(self) -> None:
+        assert "greeks_cited" in BULL_SYSTEM_PROMPT
+
+    def test_system_prompt_contains_word_limit(self) -> None:
+        """System prompt specifies a word limit."""
+        assert "500 words" in BULL_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -67,27 +62,25 @@ class TestBearPromptContent:
     """Verify bear system prompt contains required role descriptions."""
 
     def test_system_prompt_contains_bear_keyword(self) -> None:
-        msgs = build_bear_messages(CONTEXT, BULL_ANALYSIS)
-        system = msgs[0].content.lower()
-        assert "bear" in system
+        lower = BEAR_SYSTEM_PROMPT.lower()
+        assert "bear" in lower
 
     def test_system_prompt_contains_conviction(self) -> None:
-        msgs = build_bear_messages(CONTEXT, BULL_ANALYSIS)
-        system = msgs[0].content.lower()
-        assert "conviction" in system
+        lower = BEAR_SYSTEM_PROMPT.lower()
+        assert "conviction" in lower
 
-    def test_empty_bull_analysis_accepted(self) -> None:
-        msgs = build_bear_messages(CONTEXT, "")
-        user = msgs[1].content
-        assert "<opponent_argument>" in user
+    def test_system_prompt_contains_version(self) -> None:
+        assert PROMPT_VERSION in BEAR_SYSTEM_PROMPT
 
-    def test_messages_count(self) -> None:
-        msgs = build_bear_messages(CONTEXT, BULL_ANALYSIS)
-        assert len(msgs) == 2
+    def test_system_prompt_contains_key_points_field(self) -> None:
+        assert "key_points" in BEAR_SYSTEM_PROMPT
 
-    def test_bear_version_header(self) -> None:
-        msgs = build_bear_messages(CONTEXT, BULL_ANALYSIS)
-        assert "VERSION: v1.0" in msgs[0].content
+    def test_system_prompt_contains_downside_risk(self) -> None:
+        lower = BEAR_SYSTEM_PROMPT.lower()
+        assert "downside" in lower or "risk" in lower
+
+    def test_system_prompt_contains_word_limit(self) -> None:
+        assert "500 words" in BEAR_SYSTEM_PROMPT
 
 
 # ---------------------------------------------------------------------------
@@ -99,58 +92,36 @@ class TestRiskPromptContent:
     """Verify risk system prompt contains required role descriptions."""
 
     def test_system_prompt_contains_risk_keyword(self) -> None:
-        msgs = build_risk_messages(CONTEXT, BULL_ANALYSIS, BEAR_ANALYSIS)
-        system = msgs[0].content.lower()
-        assert "risk" in system
+        lower = RISK_SYSTEM_PROMPT.lower()
+        assert "risk" in lower
 
     def test_system_prompt_contains_neutral_option(self) -> None:
-        msgs = build_risk_messages(CONTEXT, BULL_ANALYSIS, BEAR_ANALYSIS)
-        system = msgs[0].content.lower()
-        assert "neutral" in system
+        lower = RISK_SYSTEM_PROMPT.lower()
+        assert "neutral" in lower
 
-    def test_empty_analyses_accepted(self) -> None:
-        msgs = build_risk_messages(CONTEXT, "", "")
-        user = msgs[1].content
-        assert 'role="bull"' in user
-        assert 'role="bear"' in user
+    def test_system_prompt_contains_version(self) -> None:
+        assert PROMPT_VERSION in RISK_SYSTEM_PROMPT
 
-    def test_messages_count(self) -> None:
-        msgs = build_risk_messages(CONTEXT, BULL_ANALYSIS, BEAR_ANALYSIS)
-        assert len(msgs) == 2
+    def test_system_prompt_contains_direction_field(self) -> None:
+        assert "direction" in RISK_SYSTEM_PROMPT
 
-    def test_risk_version_header(self) -> None:
-        msgs = build_risk_messages(CONTEXT, BULL_ANALYSIS, BEAR_ANALYSIS)
-        assert "VERSION: v1.0" in msgs[0].content
+    def test_system_prompt_contains_risk_factors_field(self) -> None:
+        assert "risk_factors" in RISK_SYSTEM_PROMPT
 
+    def test_system_prompt_contains_bull_summary_field(self) -> None:
+        assert "bull_summary" in RISK_SYSTEM_PROMPT
 
-# ---------------------------------------------------------------------------
-# PromptMessage model
-# ---------------------------------------------------------------------------
+    def test_system_prompt_contains_bear_summary_field(self) -> None:
+        assert "bear_summary" in RISK_SYSTEM_PROMPT
 
+    def test_system_prompt_contains_recommended_action_field(self) -> None:
+        assert "recommended_action" in RISK_SYSTEM_PROMPT
 
-class TestPromptMessageModel:
-    """Extended tests for PromptMessage model."""
+    def test_system_prompt_contains_word_limit(self) -> None:
+        assert "500 words" in RISK_SYSTEM_PROMPT
 
-    def test_valid_construction(self) -> None:
-        pm = PromptMessage(role="system", content="Test content")
-        assert pm.role == "system"
-        assert pm.content == "Test content"
-
-    def test_json_roundtrip(self) -> None:
-        original = PromptMessage(role="user", content="Some user input")
-        restored = PromptMessage.model_validate_json(original.model_dump_json())
-        assert restored == original
-
-    def test_any_role_accepted(self) -> None:
-        """No validator limiting role to system/user/assistant."""
-        pm = PromptMessage(role="custom_role", content="test")
-        assert pm.role == "custom_role"
-
-    def test_empty_content_accepted(self) -> None:
-        pm = PromptMessage(role="system", content="")
-        assert pm.content == ""
-
-    def test_frozen_content_assignment_raises(self) -> None:
-        pm = PromptMessage(role="system", content="original")
-        with pytest.raises(ValidationError, match="frozen"):
-            pm.content = "modified"  # type: ignore[misc]
+    def test_system_prompt_lists_valid_directions(self) -> None:
+        """Risk prompt lists the three valid direction values."""
+        assert "bullish" in RISK_SYSTEM_PROMPT
+        assert "bearish" in RISK_SYSTEM_PROMPT
+        assert "neutral" in RISK_SYSTEM_PROMPT

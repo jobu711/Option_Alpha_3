@@ -1,170 +1,122 @@
-"""Tests for the RiskAgent.
+"""Tests for the risk PydanticAI agent.
 
-Verifies that the risk agent synthesizes bull + bear into a TradeThesis,
-preserves direction and disclaimer, sets initial token values, and
-handles parse failures -- all with a mocked LLMClient.
+Verifies that ``run_risk()`` returns a properly typed ``(_ThesisParsed, RunUsage)``
+tuple using PydanticAI's ``TestModel``.  The risk agent receives both the bull's
+and bear's analyses as dependencies.
 """
 
 from __future__ import annotations
 
-import json
-from unittest.mock import AsyncMock
-
 import pytest
+from pydantic_ai.models.test import TestModel
+from pydantic_ai.usage import RunUsage
 
-from Option_Alpha.agents.llm_client import LLMClient, LLMResponse
-from Option_Alpha.agents.risk import RiskAgent
-from Option_Alpha.models import (
-    AgentResponse,
-    GreeksCited,
-    MarketContext,
-    SignalDirection,
-    TradeThesis,
-)
-
-# ---------------------------------------------------------------------------
-# Mock data
-# ---------------------------------------------------------------------------
-
-MOCK_THESIS_JSON: str = json.dumps(
-    {
-        "direction": "bullish",
-        "conviction": 0.58,
-        "entry_rationale": "Moderate bullish case with RSI at 55 and balanced sentiment.",
-        "risk_factors": ["IV crush risk near earnings", "Theta decay of $0.08/day"],
-        "recommended_action": "Buy AAPL 185 call at mid price with tight stop",
-        "bull_summary": "Momentum indicators favor mild upside with moderate conviction.",
-        "bear_summary": "Proximity to 52-week high and earnings risk cap potential gains.",
-    }
-)
-
-
-def _make_risk_llm_response(content: str = MOCK_THESIS_JSON) -> LLMResponse:
-    return LLMResponse(
-        content=content,
-        model="llama3.1:8b",
-        input_tokens=700,
-        output_tokens=300,
-        duration_ms=4000,
-    )
-
-
-def _make_agent_response(role: str) -> AgentResponse:
-    """Create a sample AgentResponse for the given role."""
-    return AgentResponse(
-        agent_role=role,
-        analysis=f"Sample {role} analysis.",
-        key_points=[f"{role} point 1", f"{role} point 2"],
-        conviction=0.60,
-        contracts_referenced=["AAPL 185 call 2025-02-21"],
-        greeks_cited=GreeksCited(delta=0.45, theta=-0.08),
-        model_used="llama3.1:8b",
-        input_tokens=500,
-        output_tokens=200,
-    )
-
+from Option_Alpha.agents._parsing import _ThesisParsed
+from Option_Alpha.agents.risk import RiskDeps, run_risk
+from Option_Alpha.models import SignalDirection
 
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
 
 
-class TestRiskAgent:
-    """Tests for RiskAgent.run()."""
+class TestRunRisk:
+    """Tests for run_risk() with PydanticAI TestModel."""
 
     @pytest.mark.asyncio()
-    async def test_risk_run_success(self, sample_market_context: MarketContext) -> None:
-        """Returns (TradeThesis, LLMResponse) tuple."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_risk_llm_response())
-
-        agent = RiskAgent(mock_llm)
-        thesis, llm_resp = await agent.run(
-            sample_market_context,
-            _make_agent_response("bull"),
-            _make_agent_response("bear"),
+    async def test_returns_thesis_parsed(self) -> None:
+        """run_risk() returns a _ThesisParsed instance as the first element."""
+        model = TestModel()
+        deps = RiskDeps(
+            context_text="Ticker: AAPL\nPrice: $186.75\nIV Rank: 45.2",
+            bull_argument="RSI at 55 suggests room for upward momentum.",
+            bear_argument="Elevated IV rank at 45 limits upside.",
         )
+        parsed, _usage = await run_risk(deps, model)
 
-        assert isinstance(thesis, TradeThesis)
-        assert isinstance(llm_resp, LLMResponse)
+        assert isinstance(parsed, _ThesisParsed)
 
     @pytest.mark.asyncio()
-    async def test_risk_direction_from_llm(self, sample_market_context: MarketContext) -> None:
-        """direction field from LLM JSON is preserved."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_risk_llm_response())
-
-        agent = RiskAgent(mock_llm)
-        thesis, _ = await agent.run(
-            sample_market_context,
-            _make_agent_response("bull"),
-            _make_agent_response("bear"),
+    async def test_returns_run_usage(self) -> None:
+        """run_risk() returns a RunUsage instance as the second element."""
+        model = TestModel()
+        deps = RiskDeps(
+            context_text="Ticker: AAPL",
+            bull_argument="Bull case.",
+            bear_argument="Bear case.",
         )
+        _parsed, usage = await run_risk(deps, model)
 
-        assert thesis.direction == SignalDirection.BULLISH
+        assert isinstance(usage, RunUsage)
 
     @pytest.mark.asyncio()
-    async def test_risk_disclaimer_set(self, sample_market_context: MarketContext) -> None:
-        """disclaimer is the standard educational disclaimer string."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_risk_llm_response())
-
-        agent = RiskAgent(mock_llm)
-        thesis, _ = await agent.run(
-            sample_market_context,
-            _make_agent_response("bull"),
-            _make_agent_response("bear"),
+    async def test_direction_is_signal_direction(self) -> None:
+        """The parsed direction field is a SignalDirection enum member."""
+        model = TestModel()
+        deps = RiskDeps(
+            context_text="Ticker: AAPL",
+            bull_argument="Bull case text.",
+            bear_argument="Bear case text.",
         )
+        parsed, _usage = await run_risk(deps, model)
 
-        assert "educational" in thesis.disclaimer.lower()
-        assert "not investment advice" in thesis.disclaimer.lower()
+        assert isinstance(parsed.direction, SignalDirection)
 
     @pytest.mark.asyncio()
-    async def test_risk_initial_tokens_zero(self, sample_market_context: MarketContext) -> None:
-        """total_tokens=0 and duration_ms=0 (orchestrator fills these)."""
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=_make_risk_llm_response())
-
-        agent = RiskAgent(mock_llm)
-        thesis, _ = await agent.run(
-            sample_market_context,
-            _make_agent_response("bull"),
-            _make_agent_response("bear"),
+    async def test_usage_has_non_negative_tokens(self) -> None:
+        """Token counts in RunUsage are non-negative integers."""
+        model = TestModel()
+        deps = RiskDeps(
+            context_text="test context",
+            bull_argument="bull text",
+            bear_argument="bear text",
         )
+        _parsed, usage = await run_risk(deps, model)
 
-        assert thesis.total_tokens == 0
-        assert thesis.duration_ms == 0
+        assert isinstance(usage.total_tokens, int)
+        assert usage.total_tokens >= 0
+        assert usage.input_tokens >= 0
+        assert usage.output_tokens >= 0
 
     @pytest.mark.asyncio()
-    async def test_risk_parse_failure_retries(self, sample_market_context: MarketContext) -> None:
-        """First response bad JSON, second good -> succeeds."""
-        bad_resp = _make_risk_llm_response("not json")
-        good_resp = _make_risk_llm_response(MOCK_THESIS_JSON)
-
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(side_effect=[bad_resp, good_resp])
-
-        agent = RiskAgent(mock_llm)
-        thesis, _ = await agent.run(
-            sample_market_context,
-            _make_agent_response("bull"),
-            _make_agent_response("bear"),
+    async def test_parsed_has_required_fields(self) -> None:
+        """_ThesisParsed output has all required fields populated."""
+        model = TestModel()
+        deps = RiskDeps(
+            context_text="Ticker: AAPL\nRSI(14): 55.3",
+            bull_argument="Bull argument here.",
+            bear_argument="Bear argument here.",
         )
+        parsed, _usage = await run_risk(deps, model)
 
-        assert thesis.direction == SignalDirection.BULLISH
+        assert isinstance(parsed.conviction, float)
+        assert isinstance(parsed.entry_rationale, str)
+        assert isinstance(parsed.risk_factors, list)
+        assert isinstance(parsed.recommended_action, str)
+        assert isinstance(parsed.bull_summary, str)
+        assert isinstance(parsed.bear_summary, str)
 
     @pytest.mark.asyncio()
-    async def test_risk_all_retries_fail(self, sample_market_context: MarketContext) -> None:
-        """All attempts fail -> raises exception."""
-        bad_resp = _make_risk_llm_response("garbage")
-        mock_llm = AsyncMock(spec=LLMClient)
-        mock_llm.chat = AsyncMock(return_value=bad_resp)
+    async def test_risk_deps_requires_both_arguments(self) -> None:
+        """RiskDeps requires context_text, bull_argument, and bear_argument."""
+        deps = RiskDeps(
+            context_text="Ticker: AAPL",
+            bull_argument="Bull argued this.",
+            bear_argument="Bear argued that.",
+        )
+        assert deps.context_text == "Ticker: AAPL"
+        assert deps.bull_argument == "Bull argued this."
+        assert deps.bear_argument == "Bear argued that."
 
-        agent = RiskAgent(mock_llm)
+    @pytest.mark.asyncio()
+    async def test_usage_requests_at_least_one(self) -> None:
+        """At least one request is made to the model."""
+        model = TestModel()
+        deps = RiskDeps(
+            context_text="Ticker: AAPL",
+            bull_argument="bull text",
+            bear_argument="bear text",
+        )
+        _parsed, usage = await run_risk(deps, model)
 
-        with pytest.raises(Exception):  # noqa: B017, PT011
-            await agent.run(
-                sample_market_context,
-                _make_agent_response("bull"),
-                _make_agent_response("bear"),
-            )
+        assert usage.requests >= 1

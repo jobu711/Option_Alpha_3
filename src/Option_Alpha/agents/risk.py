@@ -43,6 +43,7 @@ risk_agent: Agent[RiskDeps, _ThesisParsed] = Agent(
     "openai:llama3.1:8b",  # placeholder — overridden at runtime via model param
     output_type=_ThesisParsed,
     retries=2,
+    defer_model_check=True,
 )
 
 
