@@ -13,15 +13,21 @@ import logging
 import time
 
 import httpx
-import ollama
 import pydantic
+from pydantic_ai.exceptions import UnexpectedModelBehavior
 
 from Option_Alpha.agents._parsing import DISCLAIMER
-from Option_Alpha.agents.bear import BearAgent
-from Option_Alpha.agents.bull import BullAgent
+from Option_Alpha.agents.bear import BearDeps, run_bear
+from Option_Alpha.agents.bull import BullDeps, run_bull
+from Option_Alpha.agents.context_builder import build_context_text
 from Option_Alpha.agents.fallback import build_fallback_thesis
-from Option_Alpha.agents.llm_client import DEFAULT_TIMEOUT, LLMClient
-from Option_Alpha.agents.risk import RiskAgent
+from Option_Alpha.agents.model_config import (
+    DEFAULT_HOST,
+    DEFAULT_MODEL,
+    build_ollama_model,
+    validate_model_available,
+)
+from Option_Alpha.agents.risk import RiskDeps, run_risk
 from Option_Alpha.data.repository import Repository
 from Option_Alpha.models import MarketContext, SignalDirection, TradeThesis
 
@@ -31,7 +37,7 @@ logger = logging.getLogger(__name__)
 # Constants
 # ---------------------------------------------------------------------------
 
-_AGENT_TIMEOUT: float = DEFAULT_TIMEOUT
+_AGENT_TIMEOUT: float = 180.0
 _BULLISH_SCORE_THRESHOLD: float = 50.0
 
 # Exceptions that trigger data-driven fallback
@@ -39,7 +45,7 @@ _FALLBACK_EXCEPTIONS: tuple[type[BaseException], ...] = (
     asyncio.TimeoutError,
     json.JSONDecodeError,
     pydantic.ValidationError,
-    ollama.ResponseError,
+    UnexpectedModelBehavior,
     httpx.ConnectError,
     ConnectionRefusedError,
 )
@@ -57,8 +63,10 @@ class DebateOrchestrator:
 
     Parameters
     ----------
-    llm_client:
-        Shared Ollama LLM client used by all three agents.
+    host:
+        Base URL of the Ollama server (e.g. ``http://localhost:11434``).
+    model_name:
+        Name of the Ollama model to use (e.g. ``llama3.1:8b``).
     repository:
         Optional persistence layer. If provided, the final thesis is
         saved via ``repository.save_ai_thesis()``.
@@ -66,10 +74,12 @@ class DebateOrchestrator:
 
     def __init__(
         self,
-        llm_client: LLMClient,
+        host: str = DEFAULT_HOST,
+        model_name: str = DEFAULT_MODEL,
         repository: Repository | None = None,
     ) -> None:
-        self._llm_client = llm_client
+        self._host = host
+        self._model_name = model_name
         self._repository = repository
 
     async def run_debate(
@@ -113,7 +123,7 @@ class DebateOrchestrator:
 
         # Check LLM availability
         try:
-            model_available = await self._llm_client.validate_model()
+            model_available = await validate_model_available(self._host, self._model_name)
         except _FALLBACK_EXCEPTIONS as exc:
             logger.warning(
                 "DebateOrchestrator: LLM validation failed for %s: %s",
@@ -177,54 +187,54 @@ class DebateOrchestrator:
         start_time: float,
     ) -> TradeThesis:
         """Execute the three agents sequentially and build the final thesis."""
-        bull_agent = BullAgent(self._llm_client)
-        bear_agent = BearAgent(self._llm_client)
-        risk_agent = RiskAgent(self._llm_client)
+        model = build_ollama_model(self._host, self._model_name)
+        context_text = build_context_text(context)
 
         # Bull
         logger.info("DebateOrchestrator: running bull agent for %s", context.ticker)
-        bull_response = await asyncio.wait_for(
-            bull_agent.run(context),
+        bull_deps = BullDeps(context_text=context_text)
+        bull_parsed, bull_usage = await asyncio.wait_for(
+            run_bull(bull_deps, model),
             timeout=_AGENT_TIMEOUT,
         )
 
         # Bear
         logger.info("DebateOrchestrator: running bear agent for %s", context.ticker)
-        bear_response = await asyncio.wait_for(
-            bear_agent.run(context, bull_response),
+        bear_deps = BearDeps(context_text=context_text, bull_argument=bull_parsed.analysis)
+        bear_parsed, bear_usage = await asyncio.wait_for(
+            run_bear(bear_deps, model),
             timeout=_AGENT_TIMEOUT,
         )
 
         # Risk
         logger.info("DebateOrchestrator: running risk agent for %s", context.ticker)
-        risk_thesis, risk_llm_response = await asyncio.wait_for(
-            risk_agent.run(context, bull_response, bear_response),
+        risk_deps = RiskDeps(
+            context_text=context_text,
+            bull_argument=bull_parsed.analysis,
+            bear_argument=bear_parsed.analysis,
+        )
+        risk_parsed, risk_usage = await asyncio.wait_for(
+            run_risk(risk_deps, model),
             timeout=_AGENT_TIMEOUT,
         )
 
         # Accumulate total tokens from all three agents
-        total_tokens = (
-            bull_response.input_tokens
-            + bull_response.output_tokens
-            + bear_response.input_tokens
-            + bear_response.output_tokens
-            + risk_llm_response.input_tokens
-            + risk_llm_response.output_tokens
-        )
+        combined_usage = bull_usage + bear_usage + risk_usage
+        total_tokens = combined_usage.total_tokens
 
         # Compute wall-clock duration
         elapsed_ms = int((time.monotonic() - start_time) * 1000)
 
         # Reconstruct thesis with accumulated totals (frozen model)
         final_thesis = TradeThesis(
-            direction=risk_thesis.direction,
-            conviction=risk_thesis.conviction,
-            entry_rationale=risk_thesis.entry_rationale,
-            risk_factors=risk_thesis.risk_factors,
-            recommended_action=risk_thesis.recommended_action,
-            bull_summary=risk_thesis.bull_summary,
-            bear_summary=risk_thesis.bear_summary,
-            model_used=risk_thesis.model_used,
+            direction=risk_parsed.direction,
+            conviction=risk_parsed.conviction,
+            entry_rationale=risk_parsed.entry_rationale,
+            risk_factors=risk_parsed.risk_factors,
+            recommended_action=risk_parsed.recommended_action,
+            bull_summary=risk_parsed.bull_summary,
+            bear_summary=risk_parsed.bear_summary,
+            model_used=self._model_name,
             total_tokens=total_tokens,
             duration_ms=elapsed_ms,
             disclaimer=DISCLAIMER,
