@@ -1,125 +1,99 @@
-"""Risk/moderator agent for the options analysis system.
+"""Risk/moderator debate agent using PydanticAI.
 
-Receives both bull and bear ``AgentResponse`` objects, synthesizes a final
-``TradeThesis`` with direction, conviction, and risk factors. JSON output is
-parsed and validated with retry logic via the shared ``_parsing`` helper.
-
-The risk agent does NOT populate ``model_used``, ``total_tokens``,
-``duration_ms``, or ``disclaimer`` from the LLM output — those are set
-by code after parsing.
+Exposes a module-level ``risk_agent`` and a convenience ``run_risk()`` wrapper
+that calls the agent with the supplied dependencies and model override.
+The risk agent synthesizes both bull and bear arguments into a final trade
+thesis with direction, conviction, and risk factors.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
-from pydantic import BaseModel, ConfigDict
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.usage import RunUsage
 
-from Option_Alpha.agents._parsing import (
-    DISCLAIMER,
-    THESIS_SCHEMA_HINT,
-    parse_with_retry,
-    prompt_to_chat,
-)
-from Option_Alpha.agents.context_builder import build_context_text
-from Option_Alpha.agents.llm_client import LLMClient, LLMResponse
-from Option_Alpha.agents.prompts import build_risk_messages
-from Option_Alpha.models import AgentResponse, MarketContext, SignalDirection, TradeThesis
+from Option_Alpha.agents._parsing import _ThesisParsed
+from Option_Alpha.agents.prompts import RISK_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
-# Intermediate model for parsing (LLM output fields only)
+# Dependencies
 # ---------------------------------------------------------------------------
 
 
-class _ThesisParsed(BaseModel):
-    """Intermediate model matching the JSON schema the LLM is asked to produce.
+@dataclass
+class RiskDeps:
+    """Dependencies injected into the risk agent at runtime."""
 
-    Does NOT include ``model_used``, ``total_tokens``, ``duration_ms``, or
-    ``disclaimer`` — those are added by the orchestrator / risk agent code.
+    context_text: str
+    bull_argument: str
+    bear_argument: str
+
+
+# ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
+
+risk_agent: Agent[RiskDeps, _ThesisParsed] = Agent(
+    "openai:llama3.1:8b",  # placeholder — overridden at runtime via model param
+    output_type=_ThesisParsed,
+    retries=2,
+)
+
+
+@risk_agent.system_prompt
+async def _risk_system_prompt(ctx: RunContext[RiskDeps]) -> str:  # noqa: ARG001
+    """Return the risk system prompt."""
+    return RISK_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Convenience runner
+# ---------------------------------------------------------------------------
+
+
+async def run_risk(deps: RiskDeps, model: OpenAIModel) -> tuple[_ThesisParsed, RunUsage]:
+    """Run the risk agent and return ``(parsed_output, usage)``.
+
+    Parameters
+    ----------
+    deps:
+        Runtime dependencies containing market context text, the bull's argument,
+        and the bear's argument.
+    model:
+        A PydanticAI ``OpenAIModel`` pointing at the Ollama instance.
+
+    Returns
+    -------
+    tuple[_ThesisParsed, RunUsage]
+        The validated parsed output and token-usage metadata.
     """
-
-    model_config = ConfigDict(frozen=True)
-
-    direction: SignalDirection
-    conviction: float
-    entry_rationale: str
-    risk_factors: list[str]
-    recommended_action: str
-    bull_summary: str
-    bear_summary: str
-
-
-class RiskAgent:
-    """Risk assessment / moderator agent.
-
-    Synthesizes the bull and bear arguments into a final ``TradeThesis``.
-    The LLM response only provides the content fields; metadata (model,
-    tokens, timing, disclaimer) is added by code.
-    """
-
-    def __init__(self, llm_client: LLMClient) -> None:
-        self._llm_client = llm_client
-
-    async def run(
-        self,
-        context: MarketContext,
-        bull_response: AgentResponse,
-        bear_response: AgentResponse,
-    ) -> tuple[TradeThesis, LLMResponse]:
-        """Execute the risk assessment.
-
-        Returns a tuple of ``(TradeThesis, LLMResponse)`` so the orchestrator
-        can access the raw LLM metadata for token accumulation.
-
-        Steps:
-        1. Build context text from ``MarketContext``.
-        2. Build risk prompt messages with both analyses.
-        3. Convert ``PromptMessage`` -> ``ChatMessage``.
-        4. Call the LLM with parse-and-retry.
-        5. Build ``TradeThesis`` from parsed data + code-provided metadata.
-        6. Return ``(TradeThesis, LLMResponse)``.
-        """
-        logger.info("RiskAgent: starting synthesis for %s", context.ticker)
-
-        context_text = build_context_text(context)
-        prompt_messages = build_risk_messages(
-            context_text,
-            bull_response.analysis,
-            bear_response.analysis,
-        )
-        chat_messages = prompt_to_chat(prompt_messages)
-
-        parsed, llm_response = await parse_with_retry(
-            self._llm_client,
-            chat_messages,
-            _ThesisParsed,
-            schema_hint=THESIS_SCHEMA_HINT,
-        )
-
-        # model_used, total_tokens, duration_ms filled by orchestrator;
-        # we set initial values here that the orchestrator will override.
-        thesis = TradeThesis(
-            direction=parsed.direction,
-            conviction=parsed.conviction,
-            entry_rationale=parsed.entry_rationale,
-            risk_factors=parsed.risk_factors,
-            recommended_action=parsed.recommended_action,
-            bull_summary=parsed.bull_summary,
-            bear_summary=parsed.bear_summary,
-            model_used=llm_response.model,
-            total_tokens=0,
-            duration_ms=0,
-            disclaimer=DISCLAIMER,
-        )
-
-        logger.info(
-            "RiskAgent: completed for %s (direction=%s, conviction=%.2f)",
-            context.ticker,
-            thesis.direction.value,
-            thesis.conviction,
-        )
-
-        return thesis, llm_response
+    user_prompt = (
+        "<user_input>\n"
+        f"{deps.context_text}\n"
+        "</user_input>\n"
+        "\n"
+        '<opponent_argument role="bull">\n'
+        f"{deps.bull_argument}\n"
+        "</opponent_argument>\n"
+        "\n"
+        '<opponent_argument role="bear">\n'
+        f"{deps.bear_argument}\n"
+        "</opponent_argument>\n"
+        "\n"
+        "Synthesize both arguments and provide your risk assessment as JSON."
+    )
+    result = await risk_agent.run(user_prompt, deps=deps, model=model)
+    logger.info(
+        "Risk agent completed (direction=%s, conviction=%.2f, input_tokens=%d, output_tokens=%d)",
+        result.output.direction.value,
+        result.output.conviction,
+        result.usage().input_tokens,
+        result.usage().output_tokens,
+    )
+    return result.output, result.usage()

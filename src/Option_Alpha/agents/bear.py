@@ -1,86 +1,92 @@
-"""Bearish debate agent for the options analysis system.
+"""Bearish debate agent using PydanticAI.
 
-Takes a ``MarketContext`` and the bull agent's ``AgentResponse``, then
-produces a bearish ``AgentResponse`` by calling the Ollama LLM with the
-bear prompt template. JSON output is parsed and validated with retry logic
-via the shared ``_parsing`` helper.
+Exposes a module-level ``bear_agent`` and a convenience ``run_bear()`` wrapper
+that calls the agent with the supplied dependencies and model override.
+The bear agent receives the bull's analysis and must rebut it with
+data-driven counter-arguments.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
-from Option_Alpha.agents._parsing import (
-    AGENT_RESPONSE_SCHEMA_HINT,
-    AgentParsed,
-    parse_with_retry,
-    prompt_to_chat,
-)
-from Option_Alpha.agents.context_builder import build_context_text
-from Option_Alpha.agents.llm_client import LLMClient
-from Option_Alpha.agents.prompts import build_bear_messages
-from Option_Alpha.models import AgentResponse, MarketContext
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.usage import RunUsage
+
+from Option_Alpha.agents._parsing import AgentParsed
+from Option_Alpha.agents.prompts import BEAR_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
 
-class BearAgent:
-    """Bearish debate agent.
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
 
-    Takes a ``MarketContext`` and the bull's ``AgentResponse``, calls the
-    LLM with the bear prompt, and returns a validated ``AgentResponse``
-    with token metadata.
+
+@dataclass
+class BearDeps:
+    """Dependencies injected into the bear agent at runtime."""
+
+    context_text: str
+    bull_argument: str
+
+
+# ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
+
+bear_agent: Agent[BearDeps, AgentParsed] = Agent(
+    "openai:llama3.1:8b",  # placeholder — overridden at runtime via model param
+    output_type=AgentParsed,
+    retries=2,
+)
+
+
+@bear_agent.system_prompt
+async def _bear_system_prompt(ctx: RunContext[BearDeps]) -> str:  # noqa: ARG001
+    """Return the bear system prompt."""
+    return BEAR_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Convenience runner
+# ---------------------------------------------------------------------------
+
+
+async def run_bear(deps: BearDeps, model: OpenAIModel) -> tuple[AgentParsed, RunUsage]:
+    """Run the bear agent and return ``(parsed_output, usage)``.
+
+    Parameters
+    ----------
+    deps:
+        Runtime dependencies containing market context text and the bull's argument.
+    model:
+        A PydanticAI ``OpenAIModel`` pointing at the Ollama instance.
+
+    Returns
+    -------
+    tuple[AgentParsed, RunUsage]
+        The validated parsed output and token-usage metadata.
     """
-
-    def __init__(self, llm_client: LLMClient) -> None:
-        self._llm_client = llm_client
-
-    async def run(
-        self,
-        context: MarketContext,
-        bull_response: AgentResponse,
-    ) -> AgentResponse:
-        """Execute the bear analysis.
-
-        Steps:
-        1. Build context text from ``MarketContext``.
-        2. Build bear prompt messages with the bull's analysis as rebuttal target.
-        3. Convert ``PromptMessage`` -> ``ChatMessage``.
-        4. Call the LLM with parse-and-retry.
-        5. Attach token/model metadata from ``LLMResponse``.
-        6. Return ``AgentResponse``.
-        """
-        logger.info("BearAgent: starting analysis for %s", context.ticker)
-
-        context_text = build_context_text(context)
-        prompt_messages = build_bear_messages(context_text, bull_response.analysis)
-        chat_messages = prompt_to_chat(prompt_messages)
-
-        parsed, llm_response = await parse_with_retry(
-            self._llm_client,
-            chat_messages,
-            AgentParsed,
-            schema_hint=AGENT_RESPONSE_SCHEMA_HINT,
-        )
-
-        response = AgentResponse(
-            agent_role=parsed.agent_role,
-            analysis=parsed.analysis,
-            key_points=parsed.key_points,
-            conviction=parsed.conviction,
-            contracts_referenced=parsed.contracts_referenced,
-            greeks_cited=parsed.greeks_cited,
-            model_used=llm_response.model,
-            input_tokens=llm_response.input_tokens,
-            output_tokens=llm_response.output_tokens,
-        )
-
-        logger.info(
-            "BearAgent: completed for %s (conviction=%.2f, tokens=%d+%d)",
-            context.ticker,
-            response.conviction,
-            response.input_tokens,
-            response.output_tokens,
-        )
-
-        return response
+    user_prompt = (
+        "<user_input>\n"
+        f"{deps.context_text}\n"
+        "</user_input>\n"
+        "\n"
+        "<opponent_argument>\n"
+        f"{deps.bull_argument}\n"
+        "</opponent_argument>\n"
+        "\n"
+        "Analyze the above market data, rebut the bull's argument, "
+        "and provide your bearish case as JSON."
+    )
+    result = await bear_agent.run(user_prompt, deps=deps, model=model)
+    logger.info(
+        "Bear agent completed (input_tokens=%d, output_tokens=%d)",
+        result.usage().input_tokens,
+        result.usage().output_tokens,
+    )
+    return result.output, result.usage()
