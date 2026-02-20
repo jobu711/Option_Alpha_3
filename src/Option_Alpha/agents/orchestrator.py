@@ -22,8 +22,8 @@ from Option_Alpha.agents.bull import BullDeps, run_bull
 from Option_Alpha.agents.context_builder import build_context_text
 from Option_Alpha.agents.fallback import build_fallback_thesis
 from Option_Alpha.agents.model_config import (
-    DEFAULT_HOST,
     DEFAULT_MODEL,
+    _resolve_host,
     build_ollama_model,
     validate_model_available,
 )
@@ -65,6 +65,8 @@ class DebateOrchestrator:
     ----------
     host:
         Base URL of the Ollama server (e.g. ``http://localhost:11434``).
+        Falls back to the ``OLLAMA_HOST`` environment variable, then the
+        default ``http://localhost:11434``.
     model_name:
         Name of the Ollama model to use (e.g. ``llama3.1:8b``).
     repository:
@@ -74,11 +76,11 @@ class DebateOrchestrator:
 
     def __init__(
         self,
-        host: str = DEFAULT_HOST,
+        host: str | None = None,
         model_name: str = DEFAULT_MODEL,
         repository: Repository | None = None,
     ) -> None:
-        self._host = host
+        self._host = _resolve_host(host)
         self._model_name = model_name
         self._repository = repository
 

@@ -11,11 +11,12 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
-from pydantic_ai import Agent, RunContext
+from pydantic_ai import Agent, ModelRetry, RunContext
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.usage import RunUsage
 
-from Option_Alpha.agents._parsing import _ThesisParsed
+from Option_Alpha.agents._parsing import _ThesisParsed, has_think_tags
+from Option_Alpha.agents.model_config import DEFAULT_MODEL_SETTINGS
 from Option_Alpha.agents.prompts import RISK_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -44,6 +45,7 @@ risk_agent: Agent[RiskDeps, _ThesisParsed] = Agent(
     output_type=_ThesisParsed,
     retries=2,
     defer_model_check=True,
+    model_settings=DEFAULT_MODEL_SETTINGS,
 )
 
 
@@ -51,6 +53,14 @@ risk_agent: Agent[RiskDeps, _ThesisParsed] = Agent(
 async def _risk_system_prompt(ctx: RunContext[RiskDeps]) -> str:  # noqa: ARG001
     """Return the risk system prompt."""
     return RISK_SYSTEM_PROMPT
+
+
+@risk_agent.output_validator
+def _reject_think_tags(data: _ThesisParsed) -> _ThesisParsed:
+    """Reject output that still contains ``<think>`` tag remnants."""
+    if has_think_tags(data.entry_rationale):
+        raise ModelRetry("Strip <think> tags — return only the requested JSON.")
+    return data
 
 
 # ---------------------------------------------------------------------------

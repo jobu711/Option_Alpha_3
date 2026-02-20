@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from typing import Any
 
 import httpx
 from pydantic_ai.models.openai import OpenAIModel
 from pydantic_ai.providers.ollama import OllamaProvider
+from pydantic_ai.settings import ModelSettings
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +29,17 @@ DEFAULT_MODEL: str = "llama3.1:8b"
 """Default Ollama model to use for AI debate agents."""
 
 DEFAULT_NUM_CTX: int = 8192
-"""Default context-window size passed to Ollama via model options."""
+"""Default context-window size passed to Ollama via ``extra_body``."""
+
+DEFAULT_MODEL_SETTINGS: ModelSettings = ModelSettings(
+    extra_body={"num_ctx": DEFAULT_NUM_CTX},
+)
+"""Model settings passed to every PydanticAI agent run.
+
+Sends ``num_ctx`` via ``extra_body`` so Ollama uses an 8 192-token context
+window instead of its default (2 048).  Without this, debate prompts are
+silently truncated.
+"""
 
 _VALIDATE_TIMEOUT_SECONDS: float = 5.0
 """Timeout for the model-availability health check."""
@@ -38,24 +50,31 @@ _VALIDATE_TIMEOUT_SECONDS: float = 5.0
 # ---------------------------------------------------------------------------
 
 
+def _resolve_host(host: str | None = None) -> str:
+    """Return the Ollama host, preferring *host* > ``OLLAMA_HOST`` env var > default."""
+    return host or os.environ.get("OLLAMA_HOST", DEFAULT_HOST)
+
+
 def build_ollama_model(
-    host: str = DEFAULT_HOST,
+    host: str | None = None,
     model_name: str = DEFAULT_MODEL,
 ) -> OpenAIModel:
     """Create a PydanticAI ``OpenAIModel`` backed by Ollama's OpenAI-compatible API.
 
     Args:
         host: Root URL of the Ollama server (e.g. ``http://localhost:11434``).
-              ``/v1`` is appended automatically for the OpenAI-compatible endpoint.
+              Falls back to the ``OLLAMA_HOST`` environment variable, then
+              :data:`DEFAULT_HOST`.  ``/v1`` is appended automatically.
         model_name: Name of the Ollama model to target (e.g. ``llama3.1:8b``).
 
     Returns:
         A fully configured ``OpenAIModel`` ready for use with PydanticAI agents.
     """
-    base_url = f"{host}/v1"
+    resolved = _resolve_host(host)
+    base_url = f"{resolved}/v1"
     provider = OllamaProvider(base_url=base_url)
     model = OpenAIModel(model_name, provider=provider)
-    logger.info("Built OpenAIModel for Ollama: model=%s, base_url=%s", model_name, base_url)
+    logger.info("Built OpenAIModel for Ollama: model=%s, base_url=%s", model_name, base_url)  # noqa: E501
     return model
 
 
@@ -65,7 +84,7 @@ def build_ollama_model(
 
 
 async def validate_model_available(
-    host: str = DEFAULT_HOST,
+    host: str | None = None,
     model_name: str = DEFAULT_MODEL,
 ) -> bool:
     """Check whether *model_name* is served by the Ollama instance at *host*.
@@ -81,6 +100,7 @@ async def validate_model_available(
     Returns:
         ``True`` when the model is available, ``False`` on any failure.
     """
+    host = _resolve_host(host)
     url = f"{host}/api/tags"
     try:
         async with httpx.AsyncClient() as client:
