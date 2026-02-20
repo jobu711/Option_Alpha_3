@@ -438,12 +438,16 @@ async def _scan_async(
                     )
                     raise typer.Exit(code=0)
 
-                # Determine direction for each scored ticker
+                # Determine direction using RAW indicator values (not percentile-
+                # normalized values from ts.signals).  determine_direction()
+                # expects raw ADX (0-100 scale), raw RSI (0-100), and raw SMA
+                # alignment (small float, typically -5 to +5).
                 ticker_directions: dict[str, SignalDirection] = {}
                 for ts in scored_tickers:
-                    adx_val = ts.signals.get("adx", 0.0)
-                    rsi_val = ts.signals.get("rsi", 50.0)
-                    sma_val = ts.signals.get("sma_alignment", 0.0)
+                    raw = universe_indicators.get(ts.ticker, {})
+                    adx_val = raw.get("adx", 0.0)
+                    rsi_val = raw.get("rsi", 50.0)
+                    sma_val = raw.get("sma_alignment", 0.0)
                     ticker_directions[ts.ticker] = determine_direction(
                         adx=adx_val, rsi=rsi_val, sma_alignment=sma_val
                     )
@@ -519,7 +523,14 @@ async def _scan_async(
                                 ts.ticker, direction=direction
                             )
                             if contracts:
-                                recommended = recommend_contract(contracts, direction)
+                                # Estimate spot from last OHLCV close for BSM fallback
+                                ticker_bars = ohlcv_data.get(ts.ticker)
+                                spot_price: float | None = None
+                                if ticker_bars:
+                                    spot_price = float(ticker_bars[-1].close)
+                                recommended = recommend_contract(
+                                    contracts, direction, spot=spot_price
+                                )
                                 if recommended is not None:
                                     options_results[ts.ticker] = recommended
                         except Exception as exc:  # noqa: BLE001

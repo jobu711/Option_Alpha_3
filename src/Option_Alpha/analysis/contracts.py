@@ -8,8 +8,9 @@ import datetime
 import logging
 from decimal import Decimal
 
+from Option_Alpha.analysis.bsm import bsm_greeks
 from Option_Alpha.models.enums import OptionType, SignalDirection
-from Option_Alpha.models.options import OptionContract
+from Option_Alpha.models.options import OptionContract, OptionGreeks
 
 logger = logging.getLogger(__name__)
 
@@ -29,6 +30,10 @@ DEFAULT_DELTA_TARGET_LOW: float = 0.30
 DEFAULT_DELTA_TARGET_HIGH: float = 0.40
 
 _ZERO: Decimal = Decimal("0")
+
+# --- BSM fallback for missing Greeks ---
+RISK_FREE_RATE_FALLBACK: float = 0.05
+DAYS_PER_YEAR: int = 365
 
 
 def filter_contracts(
@@ -129,27 +134,93 @@ def select_expiration(
     return result
 
 
+def _get_greeks(
+    contract: OptionContract,
+    spot: float,
+    risk_free_rate: float = RISK_FREE_RATE_FALLBACK,
+) -> OptionGreeks | None:
+    """Return existing Greeks or compute via BSM as fallback.
+
+    When yfinance does not provide Greeks (the common case), uses the
+    contract's implied_volatility and the spot price to compute BSM Greeks.
+
+    Args:
+        contract: The option contract.
+        spot: Current underlying price.
+        risk_free_rate: Annualized risk-free rate (defaults to 5%).
+
+    Returns:
+        OptionGreeks if available or computable, None otherwise.
+    """
+    if contract.greeks is not None:
+        return contract.greeks
+
+    # Need valid IV and DTE for BSM
+    if contract.implied_volatility <= 0.0:
+        return None
+    time_to_expiry = contract.dte / DAYS_PER_YEAR
+    if time_to_expiry <= 0.0:
+        return None
+    strike_f = float(contract.strike)
+    if strike_f <= 0.0 or spot <= 0.0:
+        return None
+
+    try:
+        return bsm_greeks(
+            spot=spot,
+            strike=strike_f,
+            time_to_expiry=time_to_expiry,
+            risk_free_rate=risk_free_rate,
+            iv=contract.implied_volatility,
+            option_type=contract.option_type,
+        )
+    except (ValueError, OverflowError, ZeroDivisionError):
+        logger.debug(
+            "BSM Greeks failed for %s strike %s: IV=%.4f, DTE=%d",
+            contract.ticker,
+            contract.strike,
+            contract.implied_volatility,
+            contract.dte,
+        )
+        return None
+
+
 def select_by_delta(
     contracts: list[OptionContract],
+    spot: float | None = None,
+    risk_free_rate: float = RISK_FREE_RATE_FALLBACK,
 ) -> OptionContract | None:
     """Select the contract with delta closest to the target range.
 
+    When contracts lack market Greeks (common with yfinance), computes
+    BSM Greeks as a fallback using each contract's implied volatility.
+
     Args:
         contracts: Pre-filtered contracts (single expiration preferred).
+        spot: Current underlying price for BSM fallback. If None, estimated
+            from the first contract's mid price and strike.
+        risk_free_rate: Annualized risk-free rate for BSM fallback.
 
     Returns:
-        Best contract by delta proximity, or None if no contract has greeks
-        or no delta falls within [DEFAULT_DELTA_TARGET_LOW, DEFAULT_DELTA_TARGET_HIGH].
+        Best contract by delta proximity, or None if no contract has or can
+        compute a delta within the target range.
     """
+    if not contracts:
+        return None
+
+    # Estimate spot from contracts if not provided
+    if spot is None:
+        # Use the median strike as a rough proxy for ATM / spot price
+        sorted_strikes = sorted(float(c.strike) for c in contracts)
+        spot = sorted_strikes[len(sorted_strikes) // 2]
+
     candidates: list[tuple[OptionContract, float]] = []
     for contract in contracts:
-        if contract.greeks is None:
+        greeks = _get_greeks(contract, spot, risk_free_rate)
+        if greeks is None:
             continue
         # For puts, use abs(delta) to compare against target
-        if contract.option_type == OptionType.PUT:
-            abs_delta = abs(contract.greeks.delta)
-        else:
-            abs_delta = contract.greeks.delta
+        abs_delta = abs(greeks.delta) if contract.option_type == OptionType.PUT else greeks.delta
 
         if DEFAULT_DELTA_TARGET_LOW <= abs_delta <= DEFAULT_DELTA_TARGET_HIGH:
             distance = abs(abs_delta - DEFAULT_DELTA_TARGET)
@@ -160,11 +231,13 @@ def select_by_delta(
         return None
 
     best_contract, best_distance = min(candidates, key=lambda pair: pair[1])
+    best_greeks = _get_greeks(best_contract, spot, risk_free_rate)
     logger.debug(
-        "select_by_delta: selected strike=%s, delta=%.4f (distance=%.4f)",
+        "select_by_delta: selected strike=%s, delta=%.4f (distance=%.4f, source=%s)",
         best_contract.strike,
-        best_contract.greeks.delta if best_contract.greeks else 0.0,
+        best_greeks.delta if best_greeks else 0.0,
         best_distance,
+        "market" if best_contract.greeks is not None else "bsm",
     )
     return best_contract
 
@@ -172,12 +245,18 @@ def select_by_delta(
 def recommend_contract(
     contracts: list[OptionContract],
     direction: SignalDirection,
+    spot: float | None = None,
 ) -> OptionContract | None:
-    """Run the full recommendation pipeline: filter, select expiration, select delta.
+    """Run the full recommendation pipeline: filter, select delta.
+
+    The service layer already selects the best expiration, so this function
+    only applies liquidity filtering and delta selection.  BSM Greeks are
+    computed as a fallback when market Greeks are unavailable.
 
     Args:
-        contracts: Raw list of option contracts.
+        contracts: Pre-filtered contracts from the service (single expiration).
         direction: Market direction signal.
+        spot: Current underlying price for BSM delta computation.
 
     Returns:
         Single best contract recommendation, or None if no contract qualifies.
@@ -187,12 +266,11 @@ def recommend_contract(
         logger.info("recommend_contract: no contracts passed filtering")
         return None
 
-    at_expiration = select_expiration(filtered)
-    if not at_expiration:
-        logger.info("recommend_contract: no contracts in target DTE range")
-        return None
+    # The service already selected the best expiration and may have fallen
+    # back to one outside the strict [30, 60] DTE range.  Skip the
+    # redundant DTE filter here to avoid discarding valid fallback picks.
 
-    best = select_by_delta(at_expiration)
+    best = select_by_delta(filtered, spot=spot)
     if best is None:
         logger.info("recommend_contract: no contracts matched delta target")
     return best

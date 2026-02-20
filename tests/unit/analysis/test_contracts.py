@@ -534,8 +534,14 @@ class TestRecommendContract:
         assert result is None
 
     @patch("Option_Alpha.models.options.datetime")
-    def test_no_dte_in_range_returns_none(self, mock_dt: object) -> None:
-        """Returns None when filtered contracts have no DTE in range."""
+    def test_no_dte_in_range_filtered_by_select_expiration(self, mock_dt: object) -> None:
+        """select_expiration returns empty when no DTE in [30, 60] range.
+
+        recommend_contract no longer applies DTE filtering — the service
+        layer handles expiration selection before contracts reach the
+        recommendation pipeline.  This test verifies select_expiration
+        still enforces the range independently.
+        """
         mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
         too_soon = MOCK_TODAY + datetime.timedelta(days=10)
 
@@ -543,9 +549,9 @@ class TestRecommendContract:
             make_contract(expiration=too_soon, greeks=make_greeks(delta=0.35)),
         ]
 
-        result = recommend_contract(contracts, SignalDirection.BULLISH)
+        result = select_expiration(contracts)
 
-        assert result is None
+        assert result == []
 
     @patch("Option_Alpha.models.options.datetime")
     def test_no_delta_in_range_returns_none(self, mock_dt: object) -> None:
