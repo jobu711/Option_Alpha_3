@@ -55,9 +55,6 @@ DTE_MAX: Final[int] = 60
 MIN_OPEN_INTEREST: Final[int] = 100
 MIN_VOLUME: Final[int] = 1
 MAX_SPREAD_RATIO: Final[float] = 0.30  # spread <= 30% of mid price
-DELTA_MIN_ABS: Final[float] = 0.30
-DELTA_MAX_ABS: Final[float] = 0.40
-
 # Greek validation boundaries (same as model, used for pre-filter)
 DELTA_FLOOR: Final[float] = -1.0
 DELTA_CEILING: Final[float] = 1.0
@@ -428,14 +425,16 @@ class OptionsDataService:
     def _filter_contracts(
         contracts: list[OptionContract],
     ) -> list[OptionContract]:
-        """Apply liquidity and delta filters to contracts.
+        """Apply liquidity filters to contracts.
 
         Filters:
         - Open interest >= MIN_OPEN_INTEREST (100)
         - Volume >= MIN_VOLUME (1)
         - Spread <= MAX_SPREAD_RATIO (30%) of mid price
-        - Delta abs between DELTA_MIN_ABS and DELTA_MAX_ABS
-          (only if Greeks available; contracts without Greeks kept)
+
+        Delta filtering is intentionally NOT done here so the analysis
+        layer's BSM fallback can compute Greeks for contracts that lack
+        them from yfinance.
         """
         filtered: list[OptionContract] = []
 
@@ -457,12 +456,6 @@ class OptionsDataService:
             elif contract.spread > Decimal("0"):
                 # Mid is zero but there's a spread -- illiquid
                 continue
-
-            # Delta filter (only when Greeks are available)
-            if contract.greeks is not None:
-                abs_delta = abs(contract.greeks.delta)
-                if not (DELTA_MIN_ABS <= abs_delta <= DELTA_MAX_ABS):
-                    continue
 
             filtered.append(contract)
 

@@ -8,7 +8,7 @@ Covers:
 - fetch_option_chain() with NEUTRAL returns empty list
 - select_expiration() selects closest to 45 DTE within 30-60 range
 - select_expiration() falls back when no expirations in range
-- Contract filtering: OI >= 100, spread <= 30%, volume >= 1, delta 0.30-0.40
+- Contract filtering: OI >= 100, spread <= 30%, volume >= 1 (no delta filter)
 - Zero bid/ask contracts filtered out
 - Greeks flagged with correct GreeksSource
 - IV NOT double-annualized
@@ -28,8 +28,6 @@ from Option_Alpha.models.enums import GreeksSource, OptionType, SignalDirection
 from Option_Alpha.models.options import OptionContract, OptionGreeks
 from Option_Alpha.services.cache import ServiceCache
 from Option_Alpha.services.options_data import (
-    DELTA_MAX_ABS,
-    DELTA_MIN_ABS,
     DTE_MAX,
     DTE_MIN,
     DTE_TARGET,
@@ -396,30 +394,17 @@ class TestContractFiltering:
         filtered = OptionsDataService._filter_contracts([contract])
         assert len(filtered) == 0
 
-    def test_delta_outside_range_filtered_out(self) -> None:
-        """Contract with delta outside 0.30-0.40 range is filtered out."""
+    def test_delta_outside_target_range_not_filtered(self) -> None:
+        """Service does NOT filter by delta — that's the analysis layer's job."""
         contract = self._make_contract(delta=0.55)
-        filtered = OptionsDataService._filter_contracts([contract])
-        assert len(filtered) == 0
-
-    def test_delta_below_range_filtered_out(self) -> None:
-        """Contract with delta below 0.30 is filtered out."""
-        contract = self._make_contract(delta=0.20)
-        filtered = OptionsDataService._filter_contracts([contract])
-        assert len(filtered) == 0
-
-    def test_contract_without_greeks_passes_delta_filter(self) -> None:
-        """Contract without Greeks is NOT filtered by delta."""
-        contract = self._make_contract(delta=None)
         filtered = OptionsDataService._filter_contracts([contract])
         assert len(filtered) == 1
 
-    def test_delta_at_boundary_passes(self) -> None:
-        """Contract with delta exactly at 0.30 or 0.40 passes."""
-        contract_low = self._make_contract(delta=0.30)
-        contract_high = self._make_contract(delta=0.40)
-        filtered = OptionsDataService._filter_contracts([contract_low, contract_high])
-        assert len(filtered) == 2
+    def test_contract_without_greeks_passes(self) -> None:
+        """Contract without Greeks passes service-level filtering."""
+        contract = self._make_contract(delta=None)
+        filtered = OptionsDataService._filter_contracts([contract])
+        assert len(filtered) == 1
 
 
 # ---------------------------------------------------------------------------
@@ -631,8 +616,3 @@ class TestConstants:
     def test_max_spread_ratio(self) -> None:
         """Max spread ratio is 30%."""
         assert pytest.approx(0.30) == MAX_SPREAD_RATIO
-
-    def test_delta_range(self) -> None:
-        """Delta filter range is 0.30-0.40."""
-        assert pytest.approx(0.30) == DELTA_MIN_ABS
-        assert pytest.approx(0.40) == DELTA_MAX_ABS

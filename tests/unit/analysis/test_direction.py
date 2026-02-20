@@ -213,14 +213,14 @@ class TestDetermineDirectionConflictingSignals:
     """When RSI and SMA signals conflict, the stronger aggregate wins."""
 
     def test_strong_rsi_bullish_vs_strong_sma_bearish(self) -> None:
-        """RSI < 30 (+1 bull) vs SMA < -0.5 (+1 bear) -> tie -> NEUTRAL."""
+        """RSI < 30 (+1 bull) vs SMA < -0.5 (+1 bear) -> tie -> SMA tiebreaker -> BEARISH."""
         result = determine_direction(adx=25.0, rsi=20.0, sma_alignment=-0.8)
-        assert result == SignalDirection.NEUTRAL
+        assert result == SignalDirection.BEARISH
 
     def test_strong_rsi_bearish_vs_strong_sma_bullish(self) -> None:
-        """RSI > 70 (+1 bear) vs SMA > 0.5 (+1 bull) -> tie -> NEUTRAL."""
+        """RSI > 70 (+1 bear) vs SMA > 0.5 (+1 bull) -> tie -> SMA tiebreaker -> BULLISH."""
         result = determine_direction(adx=25.0, rsi=80.0, sma_alignment=0.8)
-        assert result == SignalDirection.NEUTRAL
+        assert result == SignalDirection.BULLISH
 
     def test_mild_rsi_bullish_vs_strong_sma_bearish(self) -> None:
         """RSI in (30,50) (+0.5 bull) vs SMA < -0.5 (+1 bear) -> BEARISH."""
@@ -231,3 +231,18 @@ class TestDetermineDirectionConflictingSignals:
         """RSI < 30 (+1 bull) vs SMA in neutral zone -> BULLISH."""
         result = determine_direction(adx=25.0, rsi=20.0, sma_alignment=0.0)
         assert result == SignalDirection.BULLISH
+
+    def test_tiebreaker_uses_sma_sign_not_threshold(self) -> None:
+        """Tiebreaker resolves via SMA sign: positive SMA -> BULLISH on tie."""
+        # RSI > 70 (+1 bear) + SMA > 0.5 (+1 bull) -> tie at 1.0 each
+        # SMA alignment = 0.8 > 0 -> tiebreaker selects BULLISH
+        result = determine_direction(adx=25.0, rsi=80.0, sma_alignment=0.8)
+        assert result == SignalDirection.BULLISH
+        # Confirm the inverse: negative SMA -> BEARISH on tie
+        result2 = determine_direction(adx=25.0, rsi=20.0, sma_alignment=-0.8)
+        assert result2 == SignalDirection.BEARISH
+
+    def test_zero_scores_tie_returns_neutral(self) -> None:
+        """Both scores zero (RSI at midpoint + SMA neutral) -> no tiebreaker -> NEUTRAL."""
+        result = determine_direction(adx=25.0, rsi=50.0, sma_alignment=0.0)
+        assert result == SignalDirection.NEUTRAL

@@ -35,6 +35,7 @@ from Option_Alpha.models import (
 )
 from Option_Alpha.models.market_data import OHLCV, TickerInfo
 from Option_Alpha.reporting.disclaimer import DISCLAIMER_TEXT
+from Option_Alpha.utils.exceptions import InsufficientDataError
 
 # ---------------------------------------------------------------------------
 # Typer app and sub-apps
@@ -323,105 +324,173 @@ async def _scan_async(
                 universe_indicators: dict[str, dict[str, float]] = {}
 
                 for ticker_sym, bars in ohlcv_data.items():
+                    # Convert OHLCV models to pandas Series for indicators
+                    close_prices = pd.Series(
+                        [float(bar.close) for bar in bars],
+                        dtype=float,
+                    )
+                    high_prices = pd.Series(
+                        [float(bar.high) for bar in bars],
+                        dtype=float,
+                    )
+                    low_prices = pd.Series(
+                        [float(bar.low) for bar in bars],
+                        dtype=float,
+                    )
+                    volume_series = pd.Series(
+                        [float(bar.volume) for bar in bars],
+                        dtype=float,
+                    )
+
+                    indicators: dict[str, float] = {}
+
+                    # --- Each indicator isolated so one failure doesn't kill the ticker ---
+
+                    # Oscillators
                     try:
-                        # Convert OHLCV models to pandas Series for indicators
-                        close_prices = pd.Series(
-                            [float(bar.close) for bar in bars],
-                            dtype=float,
-                        )
-                        high_prices = pd.Series(
-                            [float(bar.high) for bar in bars],
-                            dtype=float,
-                        )
-                        low_prices = pd.Series(
-                            [float(bar.low) for bar in bars],
-                            dtype=float,
-                        )
-                        volume_series = pd.Series(
-                            [float(bar.volume) for bar in bars],
-                            dtype=float,
-                        )
-
-                        indicators: dict[str, float] = {}
-
-                        # Oscillators
                         rsi_series = rsi(close_prices)
                         if not rsi_series.dropna().empty:
                             indicators["rsi"] = float(rsi_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("RSI skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("RSI failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         stoch_series = stoch_rsi(close_prices)
                         if not stoch_series.dropna().empty:
                             indicators["stoch_rsi"] = float(stoch_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("Stoch RSI skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Stoch RSI failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         wr_series = williams_r(high_prices, low_prices, close_prices)
                         if not wr_series.dropna().empty:
                             indicators["williams_r"] = float(wr_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("Williams %%R skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Williams %%R failed for %s: %s", ticker_sym, exc)
 
-                        # Trend
+                    # Trend
+                    try:
                         adx_series = adx(high_prices, low_prices, close_prices)
                         if not adx_series.dropna().empty:
                             indicators["adx"] = float(adx_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("ADX skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("ADX failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         roc_series = roc(close_prices)
                         if not roc_series.dropna().empty:
                             indicators["roc"] = float(roc_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("ROC skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("ROC failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         st_series = supertrend(high_prices, low_prices, close_prices)
                         if not st_series.dropna().empty:
                             indicators["supertrend"] = float(st_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("Supertrend skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Supertrend failed for %s: %s", ticker_sym, exc)
 
-                        # Volatility
+                    # Volatility
+                    try:
                         atr_series = atr_percent(high_prices, low_prices, close_prices)
                         if not atr_series.dropna().empty:
                             indicators["atr_percent"] = float(atr_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("ATR%% skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("ATR%% failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         bb_series = bb_width(close_prices)
                         if not bb_series.dropna().empty:
                             indicators["bb_width"] = float(bb_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("BB width skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("BB width failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         kw_series = keltner_width(high_prices, low_prices, close_prices)
                         if not kw_series.dropna().empty:
                             indicators["keltner_width"] = float(kw_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("Keltner width skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Keltner width failed for %s: %s", ticker_sym, exc)
 
-                        # Volume
+                    # Volume
+                    try:
                         obv_series = obv_trend(close_prices, volume_series)
                         if not obv_series.dropna().empty:
                             indicators["obv_trend"] = float(obv_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("OBV trend skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("OBV trend failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         ad_series = ad_trend(high_prices, low_prices, close_prices, volume_series)
                         if not ad_series.dropna().empty:
                             indicators["ad_trend"] = float(ad_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("AD trend skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("AD trend failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         rv_series = relative_volume(volume_series)
                         if not rv_series.dropna().empty:
                             indicators["relative_volume"] = float(rv_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug(
+                            "Relative volume skipped for %s: insufficient data", ticker_sym
+                        )
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("Relative volume failed for %s: %s", ticker_sym, exc)
 
-                        # Moving averages
+                    # Moving averages
+                    try:
                         sma_series = sma_alignment(close_prices)
                         if not sma_series.dropna().empty:
                             indicators["sma_alignment"] = float(sma_series.dropna().iloc[-1])
+                    except InsufficientDataError:
+                        logger.debug("SMA alignment skipped for %s: insufficient data", ticker_sym)
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("SMA alignment failed for %s: %s", ticker_sym, exc)
 
+                    try:
                         vwap_series = vwap_deviation(close_prices, volume_series)
                         if not vwap_series.dropna().empty:
                             indicators["vwap_deviation"] = float(vwap_series.dropna().iloc[-1])
-
-                        # Options-specific indicators (iv_rank, iv_percentile,
-                        # put_call_ratio, max_pain) are omitted here because they
-                        # require historical IV / options chain data not available
-                        # from basic OHLCV.  The normalization pipeline assigns
-                        # DEFAULT_PERCENTILE (50.0) to any missing indicator
-                        # automatically, which is cleaner than hard-coding placeholders
-                        # that would be indistinguishable from real data.
-
-                        if indicators:
-                            universe_indicators[ticker_sym] = indicators
-                    except Exception as exc:  # noqa: BLE001
-                        logger.warning(
-                            "Indicator computation failed for %s: %s",
-                            ticker_sym,
-                            exc,
+                    except InsufficientDataError:
+                        logger.debug(
+                            "VWAP deviation skipped for %s: insufficient data", ticker_sym
                         )
-                        continue
+                    except Exception as exc:  # noqa: BLE001
+                        logger.warning("VWAP deviation failed for %s: %s", ticker_sym, exc)
+
+                    # Options-specific indicators (iv_rank, iv_percentile,
+                    # put_call_ratio, max_pain) are omitted here because they
+                    # require historical IV / options chain data not available
+                    # from basic OHLCV.  The normalization pipeline assigns
+                    # DEFAULT_PERCENTILE (50.0) to any missing indicator
+                    # automatically, which is cleaner than hard-coding placeholders
+                    # that would be indistinguishable from real data.
+
+                    if indicators:
+                        universe_indicators[ticker_sym] = indicators
 
                 if not universe_indicators:
                     console.print("[red]No indicators computed. Aborting scan.[/red]")

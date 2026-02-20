@@ -82,4 +82,14 @@ def determine_direction(
         return SignalDirection.BULLISH
     if bearish_score > bullish_score:
         return SignalDirection.BEARISH
+
+    # Tiebreaker: when scores are equal and both > 0, use SMA alignment
+    # direction as the deciding factor (underlying trend is more fundamental
+    # than RSI's overbought/oversold momentum signal).
+    if bullish_score > 0 and bullish_score == bearish_score:
+        if sma_alignment > 0:
+            return SignalDirection.BULLISH
+        if sma_alignment < 0:
+            return SignalDirection.BEARISH
+
     return SignalDirection.NEUTRAL
