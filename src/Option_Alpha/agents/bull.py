@@ -1,80 +1,84 @@
-"""Bullish debate agent for the options analysis system.
+"""Bullish debate agent using PydanticAI.
 
-Takes a ``MarketContext`` and produces an ``AgentResponse`` by calling the
-Ollama LLM with the bull prompt template. JSON output is parsed and
-validated with retry logic via the shared ``_parsing`` helper.
+Exposes a module-level ``bull_agent`` and a convenience ``run_bull()`` wrapper
+that calls the agent with the supplied dependencies and model override.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass
 
-from Option_Alpha.agents._parsing import (
-    AGENT_RESPONSE_SCHEMA_HINT,
-    AgentParsed,
-    parse_with_retry,
-    prompt_to_chat,
-)
-from Option_Alpha.agents.context_builder import build_context_text
-from Option_Alpha.agents.llm_client import LLMClient
-from Option_Alpha.agents.prompts import build_bull_messages
-from Option_Alpha.models import AgentResponse, MarketContext
+from pydantic_ai import Agent, RunContext
+from pydantic_ai.models.openai import OpenAIModel
+from pydantic_ai.usage import RunUsage
+
+from Option_Alpha.agents._parsing import AgentParsed
+from Option_Alpha.agents.prompts import BULL_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
 
-class BullAgent:
-    """Bullish debate agent.
+# ---------------------------------------------------------------------------
+# Dependencies
+# ---------------------------------------------------------------------------
 
-    Takes a ``MarketContext``, calls the LLM with the bull prompt, and
-    returns a validated ``AgentResponse`` with token metadata.
+
+@dataclass
+class BullDeps:
+    """Dependencies injected into the bull agent at runtime."""
+
+    context_text: str
+
+
+# ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
+
+bull_agent: Agent[BullDeps, AgentParsed] = Agent(
+    "openai:llama3.1:8b",  # placeholder — overridden at runtime via model param
+    output_type=AgentParsed,
+    retries=2,
+)
+
+
+@bull_agent.system_prompt
+async def _bull_system_prompt(ctx: RunContext[BullDeps]) -> str:  # noqa: ARG001
+    """Return the bull system prompt."""
+    return BULL_SYSTEM_PROMPT
+
+
+# ---------------------------------------------------------------------------
+# Convenience runner
+# ---------------------------------------------------------------------------
+
+
+async def run_bull(deps: BullDeps, model: OpenAIModel) -> tuple[AgentParsed, RunUsage]:
+    """Run the bull agent and return ``(parsed_output, usage)``.
+
+    Parameters
+    ----------
+    deps:
+        Runtime dependencies containing the market context text.
+    model:
+        A PydanticAI ``OpenAIModel`` pointing at the Ollama instance.
+
+    Returns
+    -------
+    tuple[AgentParsed, RunUsage]
+        The validated parsed output and token-usage metadata.
     """
-
-    def __init__(self, llm_client: LLMClient) -> None:
-        self._llm_client = llm_client
-
-    async def run(self, context: MarketContext) -> AgentResponse:
-        """Execute the bull analysis.
-
-        Steps:
-        1. Build context text from ``MarketContext``.
-        2. Build prompt messages via ``build_bull_messages()``.
-        3. Convert ``PromptMessage`` -> ``ChatMessage``.
-        4. Call the LLM with parse-and-retry.
-        5. Attach token/model metadata from ``LLMResponse``.
-        6. Return ``AgentResponse``.
-        """
-        logger.info("BullAgent: starting analysis for %s", context.ticker)
-
-        context_text = build_context_text(context)
-        prompt_messages = build_bull_messages(context_text)
-        chat_messages = prompt_to_chat(prompt_messages)
-
-        parsed, llm_response = await parse_with_retry(
-            self._llm_client,
-            chat_messages,
-            AgentParsed,
-            schema_hint=AGENT_RESPONSE_SCHEMA_HINT,
-        )
-
-        response = AgentResponse(
-            agent_role=parsed.agent_role,
-            analysis=parsed.analysis,
-            key_points=parsed.key_points,
-            conviction=parsed.conviction,
-            contracts_referenced=parsed.contracts_referenced,
-            greeks_cited=parsed.greeks_cited,
-            model_used=llm_response.model,
-            input_tokens=llm_response.input_tokens,
-            output_tokens=llm_response.output_tokens,
-        )
-
-        logger.info(
-            "BullAgent: completed for %s (conviction=%.2f, tokens=%d+%d)",
-            context.ticker,
-            response.conviction,
-            response.input_tokens,
-            response.output_tokens,
-        )
-
-        return response
+    user_prompt = (
+        "<user_input>\n"
+        f"{deps.context_text}\n"
+        "</user_input>\n"
+        "\n"
+        "Analyze the above market data and provide your bullish case as JSON."
+    )
+    result = await bull_agent.run(user_prompt, deps=deps, model=model)
+    logger.info(
+        "Bull agent completed (input_tokens=%d, output_tokens=%d)",
+        result.usage().input_tokens,
+        result.usage().output_tokens,
+    )
+    return result.output, result.usage()
