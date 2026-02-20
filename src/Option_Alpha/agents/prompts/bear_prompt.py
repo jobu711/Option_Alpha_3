@@ -1,17 +1,17 @@
-"""Bear agent prompt builder for the options debate system.
+"""Bear agent system prompt for the options debate system.
 
-Constructs Ollama-compatible message lists for the bearish analyst role.
-The bear agent receives the bull's analysis and must rebut it with
-data-driven counter-arguments.
+Exports the bear system prompt as a plain string constant for use with
+PydanticAI agents.  The bear agent receives the bull's analysis and must
+rebut it with data-driven counter-arguments.
 """
 
-from Option_Alpha.agents.prompts.bull_prompt import PROMPT_VERSION, PromptMessage
+from Option_Alpha.agents.prompts.bull_prompt import PROMPT_VERSION
 
 # ---------------------------------------------------------------------------
 # Bear system prompt
 # ---------------------------------------------------------------------------
 
-_BEAR_SYSTEM_PROMPT: str = f"""\
+BEAR_SYSTEM_PROMPT: str = f"""\
 # VERSION: {PROMPT_VERSION}
 
 ## Role
@@ -63,43 +63,3 @@ Field rules:
 - Return ONLY the JSON object.  No markdown fences, no commentary outside \
 the JSON.
 """
-
-
-def build_bear_messages(
-    context_text: str,
-    bull_analysis: str,
-) -> list[PromptMessage]:
-    """Build the Ollama message list for the bear agent.
-
-    Parameters
-    ----------
-    context_text:
-        Pre-formatted flat key-value market context string.  Must already
-        be sanitized.
-    bull_analysis:
-        The bull agent's analysis text to rebut.  Wrapped in
-        ``<opponent_argument>`` delimiters so the model does not confuse
-        it with instructions.
-
-    Returns
-    -------
-    list[PromptMessage]
-        Two-element message list: system prompt + user prompt.
-    """
-    user_content: str = (
-        "<user_input>\n"
-        f"{context_text}\n"
-        "</user_input>\n"
-        "\n"
-        "<opponent_argument>\n"
-        f"{bull_analysis}\n"
-        "</opponent_argument>\n"
-        "\n"
-        "Analyze the above market data. The bull has made their case above. "
-        "Provide your bearish counter-argument as JSON."
-    )
-
-    return [
-        PromptMessage(role="system", content=_BEAR_SYSTEM_PROMPT),
-        PromptMessage(role="user", content=user_content),
-    ]

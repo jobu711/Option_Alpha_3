@@ -1,17 +1,17 @@
-"""Risk/moderator agent prompt builder for the options debate system.
+"""Risk/moderator agent system prompt for the options debate system.
 
-Constructs Ollama-compatible message lists for the risk assessment
-analyst who synthesizes both bull and bear arguments into a final
-trade thesis with direction, conviction, and risk factors.
+Exports the risk system prompt as a plain string constant for use with
+PydanticAI agents.  The risk agent synthesizes both bull and bear arguments
+into a final trade thesis with direction, conviction, and risk factors.
 """
 
-from Option_Alpha.agents.prompts.bull_prompt import PROMPT_VERSION, PromptMessage
+from Option_Alpha.agents.prompts.bull_prompt import PROMPT_VERSION
 
 # ---------------------------------------------------------------------------
 # Risk system prompt
 # ---------------------------------------------------------------------------
 
-_RISK_SYSTEM_PROMPT: str = f"""\
+RISK_SYSTEM_PROMPT: str = f"""\
 # VERSION: {PROMPT_VERSION}
 
 ## Role
@@ -56,50 +56,3 @@ your opinion, but what each side argued.
 - Return ONLY the JSON object.  No markdown fences, no commentary outside \
 the JSON.
 """
-
-
-def build_risk_messages(
-    context_text: str,
-    bull_analysis: str,
-    bear_analysis: str,
-) -> list[PromptMessage]:
-    """Build the Ollama message list for the risk/moderator agent.
-
-    Parameters
-    ----------
-    context_text:
-        Pre-formatted flat key-value market context string.  Must already
-        be sanitized.
-    bull_analysis:
-        The bull agent's analysis text.  Wrapped in
-        ``<opponent_argument role="bull">`` delimiters.
-    bear_analysis:
-        The bear agent's analysis text.  Wrapped in
-        ``<opponent_argument role="bear">`` delimiters.
-
-    Returns
-    -------
-    list[PromptMessage]
-        Two-element message list: system prompt + user prompt.
-    """
-    user_content: str = (
-        "<user_input>\n"
-        f"{context_text}\n"
-        "</user_input>\n"
-        "\n"
-        '<opponent_argument role="bull">\n'
-        f"{bull_analysis}\n"
-        "</opponent_argument>\n"
-        "\n"
-        '<opponent_argument role="bear">\n'
-        f"{bear_analysis}\n"
-        "</opponent_argument>\n"
-        "\n"
-        "Synthesize both arguments above. "
-        "Produce your risk assessment and final trade thesis as JSON."
-    )
-
-    return [
-        PromptMessage(role="system", content=_RISK_SYSTEM_PROMPT),
-        PromptMessage(role="user", content=user_content),
-    ]

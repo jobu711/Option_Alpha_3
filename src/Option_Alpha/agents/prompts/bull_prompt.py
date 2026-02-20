@@ -1,38 +1,22 @@
-"""Bull agent prompt builder for the options debate system.
+"""Bull agent system prompt for the options debate system.
 
-Constructs Ollama-compatible message lists for the bullish analyst role.
-System messages are included inside the messages list with role="system",
-following the Ollama convention.
+Exports the bull system prompt as a plain string constant for use with
+PydanticAI agents (via ``system_prompt`` parameter or ``@agent.system_prompt``
+decorator).  The prompt is versioned and includes a JSON output schema.
 """
 
-from pydantic import BaseModel, ConfigDict
-
 # ---------------------------------------------------------------------------
-# Shared message model — imported by bear_prompt and risk_prompt
+# Shared version tag — imported by bear_prompt and risk_prompt
 # ---------------------------------------------------------------------------
 
 PROMPT_VERSION: str = "v1.0"
-
-
-class PromptMessage(BaseModel):
-    """Single message in an Ollama chat messages list.
-
-    Used instead of raw ``dict[str, str]`` so that prompt data crossing
-    module boundaries is always typed.  Frozen because messages are
-    immutable once built.
-    """
-
-    model_config = ConfigDict(frozen=True)
-
-    role: str
-    content: str
 
 
 # ---------------------------------------------------------------------------
 # Bull system prompt
 # ---------------------------------------------------------------------------
 
-_BULL_SYSTEM_PROMPT: str = f"""\
+BULL_SYSTEM_PROMPT: str = f"""\
 # VERSION: {PROMPT_VERSION}
 
 ## Role
@@ -79,31 +63,3 @@ Field rules:
 - Return ONLY the JSON object.  No markdown fences, no commentary outside \
 the JSON.
 """
-
-
-def build_bull_messages(context_text: str) -> list[PromptMessage]:
-    """Build the Ollama message list for the bull agent.
-
-    Parameters
-    ----------
-    context_text:
-        Pre-formatted flat key-value market context string.  Must already
-        be sanitized — this function does NOT sanitize inputs.
-
-    Returns
-    -------
-    list[PromptMessage]
-        Two-element message list: system prompt + user prompt.
-    """
-    user_content: str = (
-        "<user_input>\n"
-        f"{context_text}\n"
-        "</user_input>\n"
-        "\n"
-        "Analyze the above market data and provide your bullish case as JSON."
-    )
-
-    return [
-        PromptMessage(role="system", content=_BULL_SYSTEM_PROMPT),
-        PromptMessage(role="user", content=user_content),
-    ]
