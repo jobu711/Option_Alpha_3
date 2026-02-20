@@ -27,10 +27,12 @@ Greeks fallback. Consumes typed models from `models/` and indicator output. No d
 | `scoring.py` | `MIN_COMPOSITE_SCORE` | 50.0 | Inclusion threshold |
 | `scoring.py` | `INDICATOR_WEIGHTS` | dict | All 18 indicator weights (sum to 1.0) |
 | `normalization.py` | `INVERTED_INDICATORS` | frozenset | bb_width, atr_percent, relative_volume, keltner_width |
-| `direction.py` | `ADX_TREND_THRESHOLD` | 20.0 | Below = NEUTRAL |
-| `contracts.py` | `MIN_OPEN_INTEREST` | 100 | Liquidity filter |
+| `direction.py` | `ADX_TREND_THRESHOLD` | 15.0 | Below = NEUTRAL |
+| `contracts.py` | `MIN_AVG_DOLLAR_VOLUME` | 10_000_000.0 | Ticker-level $10M/day pre-filter |
+| `contracts.py` | `MIN_STOCK_PRICE` | 10.0 | Ticker-level min price pre-filter |
+| `contracts.py` | `MIN_OPEN_INTEREST` | 100 | Contract-level liquidity filter |
 | `contracts.py` | `MAX_SPREAD_PCT` | 0.30 | 30% max spread |
-| `contracts.py` | `DEFAULT_DELTA_TARGET` | 0.35 | Midpoint of 0.30-0.40 range |
+| `contracts.py` | `DEFAULT_DELTA_TARGET` | 0.35 | Midpoint of 0.20-0.50 range |
 | `catalysts.py` | `CATALYST_WEIGHT` | 0.15 | Blend weight for earnings proximity |
 | `bsm.py` | `BSM_MAX_ITERATIONS` | 50 | Newton-Raphson iteration cap |
 
@@ -41,6 +43,7 @@ Raw indicators (dict[str, dict[str, float]])
     → composite_score() per ticker → score_universe() → list[TickerScore]
     → catalyst_proximity_score() → apply_catalyst_adjustment()
     → determine_direction(adx, rsi, sma_alignment) → SignalDirection
+    → filter_liquid_tickers(scored, ohlcv, top_n) → list[TickerScore]  (pre-filter)
     → filter_contracts() → select_expiration() → select_by_delta() → OptionContract | None
 ```
 

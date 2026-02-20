@@ -66,7 +66,7 @@ class TestDirectionConstants:
     """Verify direction module constants."""
 
     def test_adx_threshold(self) -> None:
-        assert pytest.approx(20.0, abs=1e-9) == ADX_TREND_THRESHOLD
+        assert pytest.approx(15.0, abs=1e-9) == ADX_TREND_THRESHOLD
 
     def test_rsi_overbought(self) -> None:
         assert pytest.approx(70.0, abs=1e-9) == RSI_OVERBOUGHT

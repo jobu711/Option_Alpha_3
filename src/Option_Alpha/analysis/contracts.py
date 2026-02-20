@@ -33,8 +33,12 @@ TARGET_DTE: int = 45
 
 # --- Delta targeting ---
 DEFAULT_DELTA_TARGET: float = 0.35
-DEFAULT_DELTA_TARGET_LOW: float = 0.30
-DEFAULT_DELTA_TARGET_HIGH: float = 0.40
+DEFAULT_DELTA_TARGET_LOW: float = 0.20
+DEFAULT_DELTA_TARGET_HIGH: float = 0.50
+
+# --- Delta fallback bounds (hard safety limits) ---
+DELTA_FALLBACK_LOW: float = 0.10
+DELTA_FALLBACK_HIGH: float = 0.80
 
 _ZERO: Decimal = Decimal("0")
 
@@ -141,11 +145,23 @@ def filter_contracts(
             continue
         if contract.volume < MIN_VOLUME:
             continue
-        if contract.mid == _ZERO:
+
+        # Zero-bid handling: contracts with bid=0 but ask>0 are potentially
+        # tradeable via limit orders (yfinance often returns bid=0 for mid-cap
+        # and ETF options). Skip spread check for these since spread/mid is
+        # always 200% and not meaningful. Contracts with both bid=0 AND ask=0
+        # are truly dead and rejected.
+        if contract.bid == _ZERO:
+            if contract.ask == _ZERO:
+                continue  # Truly dead contract
+            # bid=0 but ask>0: pass through without spread check
+        elif contract.mid == _ZERO:
             continue
-        spread_pct: float = float(contract.spread / contract.mid)
-        if spread_pct > MAX_SPREAD_PCT:
-            continue
+        else:
+            spread_pct: float = float(contract.spread / contract.mid)
+            if spread_pct > MAX_SPREAD_PCT:
+                continue
+
         filtered.append(contract)
 
     filtered.sort(key=lambda c: c.open_interest, reverse=True)
@@ -289,32 +305,45 @@ def select_by_delta(
         sorted_strikes = sorted(float(c.strike) for c in contracts)
         spot = sorted_strikes[len(sorted_strikes) // 2]
 
-    candidates: list[tuple[OptionContract, float]] = []
+    # Single pass: compute Greeks once per contract, partition into primary
+    # and fallback candidate lists to avoid redundant BSM calls.
+    candidates: list[tuple[OptionContract, float, float]] = []  # (contract, distance, abs_delta)
+    fallback: list[tuple[OptionContract, float, float]] = []
+
     for contract in contracts:
         greeks = _get_greeks(contract, spot, risk_free_rate)
         if greeks is None:
             continue
         # For puts, use abs(delta) to compare against target
         abs_delta = abs(greeks.delta) if contract.option_type == OptionType.PUT else greeks.delta
+        distance = abs(abs_delta - DEFAULT_DELTA_TARGET)
 
         if DEFAULT_DELTA_TARGET_LOW <= abs_delta <= DEFAULT_DELTA_TARGET_HIGH:
-            distance = abs(abs_delta - DEFAULT_DELTA_TARGET)
-            candidates.append((contract, distance))
+            candidates.append((contract, distance, abs_delta))
+        elif DELTA_FALLBACK_LOW <= abs_delta <= DELTA_FALLBACK_HIGH:
+            fallback.append((contract, distance, abs_delta))
 
-    if not candidates:
-        logger.debug("select_by_delta: no contracts with delta in target range")
-        return None
+    if candidates:
+        best_contract, best_distance, best_abs_delta = min(candidates, key=lambda t: t[1])
+        logger.debug(
+            "select_by_delta: selected strike=%s, delta=%.4f (distance=%.4f, source=%s)",
+            best_contract.strike,
+            best_abs_delta,
+            best_distance,
+            "market" if best_contract.greeks is not None else "bsm",
+        )
+        return best_contract
 
-    best_contract, best_distance = min(candidates, key=lambda pair: pair[1])
-    best_greeks = _get_greeks(best_contract, spot, risk_free_rate)
-    logger.debug(
-        "select_by_delta: selected strike=%s, delta=%.4f (distance=%.4f, source=%s)",
-        best_contract.strike,
-        best_greeks.delta if best_greeks else 0.0,
-        best_distance,
-        "market" if best_contract.greeks is not None else "bsm",
-    )
-    return best_contract
+    if fallback:
+        best_fb, best_fb_dist, _ = min(fallback, key=lambda t: t[1])
+        logger.info(
+            "select_by_delta: fallback to closest (distance=%.4f)",
+            best_fb_dist,
+        )
+        return best_fb
+
+    logger.debug("select_by_delta: no contracts with delta in any acceptable range")
+    return None
 
 
 def recommend_contract(

@@ -170,16 +170,26 @@ class TestFilterContracts:
         assert result[0].strike == Decimal("190.00")
 
     @patch("Option_Alpha.models.options.datetime")
-    def test_skips_zero_mid(self, mock_dt: object) -> None:
-        """Contracts with mid = 0 (bid=0, ask=0) are skipped to avoid division by zero."""
+    def test_skips_both_zero_bid_ask(self, mock_dt: object) -> None:
+        """Contracts with bid=0 AND ask=0 (truly dead) are rejected."""
         mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
-        zero_mid = make_contract(bid="0.00", ask="0.00", last="0.00")
+        dead = make_contract(bid="0.00", ask="0.00", last="0.00")
         ok = make_contract(strike="190.00")
 
-        result = filter_contracts([zero_mid, ok], SignalDirection.BULLISH)
+        result = filter_contracts([dead, ok], SignalDirection.BULLISH)
 
         assert len(result) == 1
         assert result[0].strike == Decimal("190.00")
+
+    @patch("Option_Alpha.models.options.datetime")
+    def test_zero_bid_nonzero_ask_passes(self, mock_dt: object) -> None:
+        """Contracts with bid=0 but ask>0 pass through (yfinance data quality issue)."""
+        mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
+        zero_bid = make_contract(bid="0.00", ask="1.50", last="0.50")
+
+        result = filter_contracts([zero_bid], SignalDirection.BULLISH)
+
+        assert len(result) == 1
 
     @patch("Option_Alpha.models.options.datetime")
     def test_sorted_by_open_interest_descending(self, mock_dt: object) -> None:
@@ -389,11 +399,11 @@ class TestSelectByDelta:
 
     @patch("Option_Alpha.models.options.datetime")
     def test_no_greeks_returns_none(self, mock_dt: object) -> None:
-        """Contracts without greeks are skipped. All without -> None."""
+        """Contracts without greeks and zero IV (preventing BSM fallback) -> None."""
         mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
         contracts = [
-            make_contract(strike="180.00", greeks=None),
-            make_contract(strike="185.00", greeks=None),
+            make_contract(strike="180.00", greeks=None, implied_volatility=0.0),
+            make_contract(strike="185.00", greeks=None, implied_volatility=0.0),
         ]
 
         result = select_by_delta(contracts)
@@ -401,17 +411,59 @@ class TestSelectByDelta:
         assert result is None
 
     @patch("Option_Alpha.models.options.datetime")
-    def test_no_delta_in_range_returns_none(self, mock_dt: object) -> None:
-        """Returns None when no contract's delta falls in [0.30, 0.40]."""
+    def test_no_delta_in_any_range_returns_none(self, mock_dt: object) -> None:
+        """Returns None when no contract's delta falls in [0.10, 0.80] fallback range."""
         mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
         contracts = [
             make_contract(
                 strike="175.00",
-                greeks=make_greeks(delta=0.60),
+                greeks=make_greeks(delta=0.95),  # deep ITM, outside fallback
             ),
             make_contract(
                 strike="195.00",
-                greeks=make_greeks(delta=0.15),
+                greeks=make_greeks(delta=0.05),  # far OTM, outside fallback
+            ),
+        ]
+
+        result = select_by_delta(contracts)
+
+        assert result is None
+
+    @patch("Option_Alpha.models.options.datetime")
+    def test_delta_fallback_picks_closest_to_target(self, mock_dt: object) -> None:
+        """When no delta in [0.20, 0.50], fallback picks closest to 0.35 in [0.10, 0.80]."""
+        mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
+        contracts = [
+            make_contract(
+                strike="175.00",
+                greeks=make_greeks(delta=0.60),  # outside primary, inside fallback
+            ),
+            make_contract(
+                strike="195.00",
+                greeks=make_greeks(delta=0.15),  # outside primary, inside fallback
+            ),
+        ]
+
+        result = select_by_delta(contracts)
+
+        # delta=0.60 is closer to target 0.35 than delta=0.15
+        # |0.60 - 0.35| = 0.25 vs |0.15 - 0.35| = 0.20
+        # Actually 0.15 is closer: 0.20 < 0.25
+        assert result is not None
+        assert result.strike == Decimal("195.00")
+
+    @patch("Option_Alpha.models.options.datetime")
+    def test_delta_fallback_rejects_extreme(self, mock_dt: object) -> None:
+        """Fallback rejects delta < 0.10 or > 0.80."""
+        mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
+        contracts = [
+            make_contract(
+                strike="175.00",
+                greeks=make_greeks(delta=0.05),  # below DELTA_FALLBACK_LOW
+            ),
+            make_contract(
+                strike="195.00",
+                greeks=make_greeks(delta=0.90),  # above DELTA_FALLBACK_HIGH
             ),
         ]
 
@@ -531,7 +583,7 @@ class TestRecommendContract:
     def test_no_qualifying_contracts_returns_none(self, mock_dt: object) -> None:
         """Returns None when all contracts fail the filter stage."""
         mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
-        # All contracts have zero volume
+        # All contracts have zero volume — fails OI/volume filter
         bad = make_contract(volume=0)
 
         result = recommend_contract([bad], SignalDirection.BULLISH)
@@ -560,14 +612,14 @@ class TestRecommendContract:
 
     @patch("Option_Alpha.models.options.datetime")
     def test_no_delta_in_range_returns_none(self, mock_dt: object) -> None:
-        """Returns None when no contract has delta within target range."""
+        """Returns None when no contract has delta within any acceptable range."""
         mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
         exp_45 = MOCK_TODAY + datetime.timedelta(days=45)
 
         contracts = [
             make_contract(
                 expiration=exp_45,
-                greeks=make_greeks(delta=0.80),
+                greeks=make_greeks(delta=0.95),  # outside fallback [0.10, 0.80]
             ),
         ]
 
@@ -576,13 +628,13 @@ class TestRecommendContract:
         assert result is None
 
     @patch("Option_Alpha.models.options.datetime")
-    def test_no_greeks_returns_none(self, mock_dt: object) -> None:
-        """Returns None when all qualifying contracts lack greeks."""
+    def test_no_greeks_and_no_iv_returns_none(self, mock_dt: object) -> None:
+        """Returns None when contracts lack greeks and IV prevents BSM fallback."""
         mock_dt.date.today = _mock_today  # type: ignore[attr-defined]
         exp_45 = MOCK_TODAY + datetime.timedelta(days=45)
 
         contracts = [
-            make_contract(expiration=exp_45, greeks=None),
+            make_contract(expiration=exp_45, greeks=None, implied_volatility=0.0),
         ]
 
         result = recommend_contract(contracts, SignalDirection.BULLISH)

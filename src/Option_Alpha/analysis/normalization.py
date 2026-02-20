@@ -16,9 +16,6 @@ INVERTED_INDICATORS: frozenset[str] = frozenset(
     {"bb_width", "atr_percent", "relative_volume", "keltner_width"}
 )
 
-# Default percentile assigned to tickers missing a given indicator.
-DEFAULT_PERCENTILE: float = 50.0
-
 
 def percentile_rank_normalize(
     universe_indicators: dict[str, dict[str, float]],
@@ -29,7 +26,9 @@ def percentile_rank_normalize(
     is computed as ``(rank / count) * 100`` where rank uses 1-based ordinal
     ranking (ties receive the same rank, the next rank skips accordingly).
 
-    Tickers missing an indicator receive :data:`DEFAULT_PERCENTILE`.
+    Tickers missing an indicator are excluded from that indicator's output
+    so that :func:`~Option_Alpha.analysis.scoring.composite_score` only
+    weights indicators the ticker actually has data for.
 
     Args:
         universe_indicators: Outer key is ticker, inner key is indicator name,
@@ -59,9 +58,14 @@ def percentile_rank_normalize(
 
         count = len(ticker_values)
         if count == 0:
-            # No valid values for this indicator — everyone gets default.
-            for ticker in universe_indicators:
-                indicator_ranks.setdefault(ticker, {})[indicator_name] = DEFAULT_PERCENTILE
+            # No valid values for this indicator across the entire universe.
+            # Skip entirely — don't populate DEFAULT_PERCENTILE so the
+            # indicator is absent from the output and composite_score()
+            # renormalizes the remaining weights automatically.
+            logger.debug(
+                "Indicator '%s' has no valid values — excluded from normalization",
+                indicator_name,
+            )
             continue
 
         # Sort ascending by value to assign ranks.
@@ -81,9 +85,13 @@ def percentile_rank_normalize(
                 ranks[ticker_values[j][0]] = avg_rank
 
         # Convert ranks to percentiles: (rank / count) * 100.
+        # Tickers missing this indicator are skipped (not assigned
+        # DEFAULT_PERCENTILE) so composite_score() only weights
+        # indicators the ticker actually has data for.
         for ticker in universe_indicators:
-            percentile = (ranks[ticker] / count) * 100.0 if ticker in ranks else DEFAULT_PERCENTILE
-            indicator_ranks.setdefault(ticker, {})[indicator_name] = percentile
+            if ticker in ranks:
+                percentile = (ranks[ticker] / count) * 100.0
+                indicator_ranks.setdefault(ticker, {})[indicator_name] = percentile
 
     return indicator_ranks
 

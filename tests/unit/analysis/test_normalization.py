@@ -3,7 +3,6 @@
 import pytest
 
 from Option_Alpha.analysis.normalization import (
-    DEFAULT_PERCENTILE,
     INVERTED_INDICATORS,
     invert_indicators,
     percentile_rank_normalize,
@@ -41,30 +40,30 @@ class TestPercentileRankNormalize:
         assert result["GOOG"]["obv_trend"] == pytest.approx(200.0 / 3.0, rel=1e-4)
         assert result["MSFT"]["obv_trend"] == pytest.approx(100.0, rel=1e-4)
 
-    def test_missing_indicator_defaults_to_median(self) -> None:
-        """Tickers missing an indicator receive DEFAULT_PERCENTILE (50.0)."""
+    def test_missing_indicator_excluded_for_that_ticker(self) -> None:
+        """Tickers missing an indicator are excluded from that indicator's output."""
         universe: dict[str, dict[str, float]] = {
             "AAPL": {"rsi": 30.0, "adx": 40.0},
             "MSFT": {"rsi": 50.0},  # missing adx
         }
         result = percentile_rank_normalize(universe)
 
-        # MSFT missing adx -> default percentile
-        assert result["MSFT"]["adx"] == pytest.approx(DEFAULT_PERCENTILE, rel=1e-4)
+        # MSFT missing adx -> not present in output (skipped, not defaulted)
+        assert "adx" not in result["MSFT"]
 
         # AAPL has adx, and it's the only valid value -> rank 1/1 = 100
         assert result["AAPL"]["adx"] == pytest.approx(100.0, rel=1e-4)
 
-    def test_nan_indicator_defaults_to_median(self) -> None:
-        """NaN indicator values are treated as missing and get DEFAULT_PERCENTILE."""
+    def test_nan_indicator_excluded_for_that_ticker(self) -> None:
+        """NaN indicator values are treated as missing and excluded from output."""
         universe: dict[str, dict[str, float]] = {
             "AAPL": {"rsi": 30.0},
             "MSFT": {"rsi": float("nan")},
         }
         result = percentile_rank_normalize(universe)
 
-        # MSFT has NaN rsi -> default percentile
-        assert result["MSFT"]["rsi"] == pytest.approx(DEFAULT_PERCENTILE, rel=1e-4)
+        # MSFT has NaN rsi -> not present in output (skipped, not defaulted)
+        assert "rsi" not in result.get("MSFT", {})
 
         # AAPL is the only valid value -> rank 1/1 = 100
         assert result["AAPL"]["rsi"] == pytest.approx(100.0, rel=1e-4)
@@ -116,16 +115,17 @@ class TestPercentileRankNormalize:
         # GOOG at rank 3. Percentile = (3/3)*100 = 100.0
         assert result["GOOG"]["rsi"] == pytest.approx(100.0, rel=1e-4)
 
-    def test_all_nan_indicator_defaults_all(self) -> None:
-        """When all tickers have NaN for an indicator, all get DEFAULT_PERCENTILE."""
+    def test_all_nan_indicator_excluded_entirely(self) -> None:
+        """When all tickers have NaN for an indicator, it is excluded from output."""
         universe: dict[str, dict[str, float]] = {
             "AAPL": {"rsi": float("nan")},
             "MSFT": {"rsi": float("nan")},
         }
         result = percentile_rank_normalize(universe)
 
-        assert result["AAPL"]["rsi"] == pytest.approx(DEFAULT_PERCENTILE, rel=1e-4)
-        assert result["MSFT"]["rsi"] == pytest.approx(DEFAULT_PERCENTILE, rel=1e-4)
+        # Indicator with no valid values across the universe is excluded
+        assert "rsi" not in result.get("AAPL", {})
+        assert "rsi" not in result.get("MSFT", {})
 
 
 class TestInvertIndicators:
