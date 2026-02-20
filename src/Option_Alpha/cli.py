@@ -756,7 +756,7 @@ async def _debate_async(
     Builds a MarketContext from live data, then runs the
     DebateOrchestrator for a Bull -> Bear -> Risk debate flow.
     """
-    from Option_Alpha.agents import DebateOrchestrator, LLMClient
+    from Option_Alpha.agents import DebateOrchestrator
     from Option_Alpha.data import Database, Repository
     from Option_Alpha.indicators import adx as compute_adx
     from Option_Alpha.indicators import rsi as compute_rsi
@@ -846,8 +846,7 @@ async def _debate_async(
         )
 
         # Run debate
-        llm_client = LLMClient()
-        orchestrator = DebateOrchestrator(llm_client=llm_client, repository=repo)
+        orchestrator = DebateOrchestrator(repository=repo)
 
         console.print("[bold]Running AI debate (Bull -> Bear -> Risk)...[/bold]")
 
