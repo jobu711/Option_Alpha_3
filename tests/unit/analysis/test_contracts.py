@@ -15,18 +15,23 @@ from Option_Alpha.analysis.contracts import (
     DEFAULT_DELTA_TARGET,
     DEFAULT_DELTA_TARGET_HIGH,
     DEFAULT_DELTA_TARGET_LOW,
+    DOLLAR_VOLUME_LOOKBACK,
     MAX_DTE,
     MIN_DTE,
     MIN_OPEN_INTEREST,
+    MIN_STOCK_PRICE,
     MIN_VOLUME,
     TARGET_DTE,
     filter_contracts,
+    filter_liquid_tickers,
     recommend_contract,
     select_by_delta,
     select_expiration,
 )
 from Option_Alpha.models.enums import OptionType, SignalDirection
+from Option_Alpha.models.market_data import OHLCV
 from Option_Alpha.models.options import OptionContract, OptionGreeks
+from Option_Alpha.models.scan import TickerScore
 
 # Fixed "today" for all DTE calculations
 MOCK_TODAY = datetime.date(2025, 1, 15)
@@ -588,3 +593,189 @@ class TestRecommendContract:
         """Empty contract list returns None."""
         result = recommend_contract([], SignalDirection.BULLISH)
         assert result is None
+
+
+# ---------------------------------------------------------------------------
+# filter_liquid_tickers tests
+# ---------------------------------------------------------------------------
+
+
+def _make_ohlcv_bars(
+    close: float = 150.0,
+    volume: int = 1_000_000,
+    count: int = DOLLAR_VOLUME_LOOKBACK,
+) -> list[OHLCV]:
+    """Build a list of OHLCV bars with uniform price and volume.
+
+    Dollar volume per bar = close * volume. Default: $150M/day.
+    """
+    base_date = datetime.date(2025, 1, 1)
+    return [
+        OHLCV(
+            date=base_date + datetime.timedelta(days=i),
+            open=Decimal(str(close)),
+            high=Decimal(str(close + 1)),
+            low=Decimal(str(close - 1)),
+            close=Decimal(str(close)),
+            volume=volume,
+        )
+        for i in range(count)
+    ]
+
+
+def _make_ticker_score(ticker: str, score: float, rank: int) -> TickerScore:
+    """Build a TickerScore for testing."""
+    return TickerScore(
+        ticker=ticker,
+        score=score,
+        signals={"rsi_14": score},
+        rank=rank,
+    )
+
+
+class TestFilterLiquidTickers:
+    """Tests for filter_liquid_tickers()."""
+
+    def test_liquid_tickers_pass_through(self) -> None:
+        """Tickers above both thresholds are kept."""
+        scored = [_make_ticker_score("AAPL", 85.0, 1)]
+        # $150 * 1M = $150M/day >> $10M threshold
+        ohlcv = {"AAPL": _make_ohlcv_bars(close=150.0, volume=1_000_000)}
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        assert len(result) == 1
+        assert result[0].ticker == "AAPL"
+
+    def test_low_dollar_volume_filtered(self) -> None:
+        """Tickers below MIN_AVG_DOLLAR_VOLUME are excluded."""
+        scored = [
+            _make_ticker_score("AAPL", 85.0, 1),
+            _make_ticker_score("VEA", 80.0, 2),
+        ]
+        ohlcv = {
+            # AAPL: $150 * 1M = $150M/day — passes
+            "AAPL": _make_ohlcv_bars(close=150.0, volume=1_000_000),
+            # VEA: $50 * 100 = $5K/day — fails
+            "VEA": _make_ohlcv_bars(close=50.0, volume=100),
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        assert len(result) == 1
+        assert result[0].ticker == "AAPL"
+
+    def test_low_price_filtered(self) -> None:
+        """Tickers below MIN_STOCK_PRICE are excluded."""
+        scored = [
+            _make_ticker_score("PENNY", 90.0, 1),
+            _make_ticker_score("MSFT", 80.0, 2),
+        ]
+        ohlcv = {
+            # Price below $10 threshold, even though dollar volume is fine
+            "PENNY": _make_ohlcv_bars(close=5.0, volume=10_000_000),
+            "MSFT": _make_ohlcv_bars(close=400.0, volume=500_000),
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        assert len(result) == 1
+        assert result[0].ticker == "MSFT"
+
+    def test_top_n_limits_output(self) -> None:
+        """Output is capped at top_n tickers."""
+        scored = [
+            _make_ticker_score("AAPL", 90.0, 1),
+            _make_ticker_score("MSFT", 85.0, 2),
+            _make_ticker_score("NVDA", 80.0, 3),
+        ]
+        ohlcv = {
+            "AAPL": _make_ohlcv_bars(close=180.0, volume=1_000_000),
+            "MSFT": _make_ohlcv_bars(close=400.0, volume=500_000),
+            "NVDA": _make_ohlcv_bars(close=800.0, volume=300_000),
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=2)
+
+        assert len(result) == 2
+        assert result[0].ticker == "AAPL"
+        assert result[1].ticker == "MSFT"
+
+    def test_missing_ohlcv_data_excludes_ticker(self) -> None:
+        """Tickers with no OHLCV data are excluded."""
+        scored = [
+            _make_ticker_score("AAPL", 85.0, 1),
+            _make_ticker_score("UNKNOWN", 90.0, 2),
+        ]
+        ohlcv = {
+            "AAPL": _make_ohlcv_bars(close=150.0, volume=1_000_000),
+            # "UNKNOWN" has no entry
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        assert len(result) == 1
+        assert result[0].ticker == "AAPL"
+
+    def test_reranking_is_one_based_contiguous(self) -> None:
+        """After filtering, ranks are 1-based and contiguous."""
+        scored = [
+            _make_ticker_score("AAPL", 90.0, 1),
+            _make_ticker_score("VEA", 85.0, 2),  # will be filtered
+            _make_ticker_score("MSFT", 80.0, 3),
+            _make_ticker_score("NVDA", 75.0, 4),
+        ]
+        ohlcv = {
+            "AAPL": _make_ohlcv_bars(close=180.0, volume=1_000_000),
+            "VEA": _make_ohlcv_bars(close=50.0, volume=100),  # fails dollar vol
+            "MSFT": _make_ohlcv_bars(close=400.0, volume=500_000),
+            "NVDA": _make_ohlcv_bars(close=800.0, volume=300_000),
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        assert len(result) == 3
+        assert [t.rank for t in result] == [1, 2, 3]
+        assert [t.ticker for t in result] == ["AAPL", "MSFT", "NVDA"]
+
+    def test_empty_scored_tickers(self) -> None:
+        """Empty input returns empty output."""
+        result = filter_liquid_tickers([], {}, top_n=10)
+        assert result == []
+
+    def test_price_at_exactly_threshold_passes(self) -> None:
+        """Stock price exactly at MIN_STOCK_PRICE passes."""
+        scored = [_make_ticker_score("EDGE", 80.0, 1)]
+        ohlcv = {
+            "EDGE": _make_ohlcv_bars(close=MIN_STOCK_PRICE, volume=2_000_000),
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        assert len(result) == 1
+
+    def test_dollar_volume_at_exactly_threshold_passes(self) -> None:
+        """Dollar volume exactly at MIN_AVG_DOLLAR_VOLUME passes."""
+        # We need close * volume = $10M exactly
+        # close=$100 * volume=100_000 = $10M
+        scored = [_make_ticker_score("EXACT", 80.0, 1)]
+        ohlcv = {
+            "EXACT": _make_ohlcv_bars(close=100.0, volume=100_000),
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        assert len(result) == 1
+
+    def test_fewer_bars_than_lookback_still_works(self) -> None:
+        """Tickers with fewer OHLCV bars than DOLLAR_VOLUME_LOOKBACK still compute."""
+        scored = [_make_ticker_score("SHORT", 80.0, 1)]
+        # Only 5 bars instead of 20
+        ohlcv = {
+            "SHORT": _make_ohlcv_bars(close=200.0, volume=500_000, count=5),
+        }
+
+        result = filter_liquid_tickers(scored, ohlcv, top_n=10)
+
+        # $200 * 500K = $100M/day — passes
+        assert len(result) == 1

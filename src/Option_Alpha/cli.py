@@ -202,6 +202,7 @@ async def _scan_async(
             apply_catalyst_adjustment,
             catalyst_proximity_score,
             determine_direction,
+            filter_liquid_tickers,
             recommend_contract,
             score_universe,
         )
@@ -510,7 +511,7 @@ async def _scan_async(
                     f"\n[bold cyan]Phase 4/5: Fetching option chains (top {top_n})[/bold cyan]"
                 )
 
-                top_tickers = scored_tickers[:top_n]
+                top_tickers = filter_liquid_tickers(scored_tickers, ohlcv_data, top_n)
                 options_results: dict[str, OptionContract] = {}
 
                 try:

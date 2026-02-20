@@ -10,11 +10,18 @@ from decimal import Decimal
 
 from Option_Alpha.analysis.bsm import bsm_greeks
 from Option_Alpha.models.enums import OptionType, SignalDirection
+from Option_Alpha.models.market_data import OHLCV
 from Option_Alpha.models.options import OptionContract, OptionGreeks
+from Option_Alpha.models.scan import TickerScore
 
 logger = logging.getLogger(__name__)
 
-# --- Liquidity minimums ---
+# --- Ticker-level liquidity pre-filter thresholds ---
+MIN_AVG_DOLLAR_VOLUME: float = 10_000_000.0  # $10M daily dollar volume
+MIN_STOCK_PRICE: float = 10.0  # Exclude penny/micro stocks
+DOLLAR_VOLUME_LOOKBACK: int = 20  # Trading days for avg dollar volume
+
+# --- Contract-level liquidity minimums ---
 MIN_OPEN_INTEREST: int = 100
 MIN_VOLUME: int = 1
 MAX_SPREAD_PCT: float = 0.30
@@ -34,6 +41,74 @@ _ZERO: Decimal = Decimal("0")
 # --- BSM fallback for missing Greeks ---
 RISK_FREE_RATE_FALLBACK: float = 0.05
 DAYS_PER_YEAR: int = 365
+
+
+def filter_liquid_tickers(
+    scored_tickers: list[TickerScore],
+    ohlcv_data: dict[str, list[OHLCV]],
+    top_n: int,
+) -> list[TickerScore]:
+    """Pre-filter scored tickers by stock-level liquidity before options fetch.
+
+    Uses average daily dollar volume and minimum price to remove tickers
+    unlikely to have tradable options. Operates on data already fetched in
+    Phase 1 — no additional API calls.
+
+    Args:
+        scored_tickers: Universe scored and ranked from Phases 1-3.
+        ohlcv_data: OHLCV bars keyed by ticker symbol.
+        top_n: Maximum number of tickers to return.
+
+    Returns:
+        Up to ``top_n`` liquid tickers, re-ranked 1..N by original score order.
+    """
+    liquid: list[TickerScore] = []
+    removed_price = 0
+    removed_dollar_vol = 0
+    removed_no_data = 0
+
+    for ticker_score in scored_tickers:
+        bars = ohlcv_data.get(ticker_score.ticker)
+        if not bars:
+            removed_no_data += 1
+            continue
+
+        last_close = float(bars[-1].close)
+        if last_close < MIN_STOCK_PRICE:
+            removed_price += 1
+            continue
+
+        # Average dollar volume over the lookback window
+        recent = bars[-DOLLAR_VOLUME_LOOKBACK:]
+        avg_dollar_volume = sum(float(bar.close) * bar.volume for bar in recent) / len(recent)
+
+        if avg_dollar_volume < MIN_AVG_DOLLAR_VOLUME:
+            removed_dollar_vol += 1
+            continue
+
+        liquid.append(ticker_score)
+
+    logger.info(
+        "filter_liquid_tickers: %d -> %d tickers "
+        "(removed: %d no data, %d low price, %d low dollar volume)",
+        len(scored_tickers),
+        len(liquid),
+        removed_no_data,
+        removed_price,
+        removed_dollar_vol,
+    )
+
+    # Take top_n and re-rank 1..N
+    top = liquid[:top_n]
+    return [
+        TickerScore(
+            ticker=t.ticker,
+            score=t.score,
+            signals=t.signals,
+            rank=rank,
+        )
+        for rank, t in enumerate(top, start=1)
+    ]
 
 
 def filter_contracts(
