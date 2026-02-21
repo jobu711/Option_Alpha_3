@@ -181,14 +181,13 @@ async def _scan_async(
     top_n: int,
     min_score: float,
 ) -> None:
-    """Execute the 5-phase scan pipeline asynchronously.
+    """Execute the 4-phase scan pipeline asynchronously.
 
     Phases:
         1. Load universe and batch-fetch OHLCV data.
         2. Compute indicators, normalize, score, and determine direction.
-        3. Fetch earnings catalysts and apply adjustments.
-        4. Fetch option chains for top tickers.
-        5. Persist ScanRun and ticker scores.
+        3. Fetch option chains for top tickers.
+        4. Persist ScanRun and ticker scores.
     """
     global _scan_cancelled  # noqa: PLW0603
     _scan_cancelled = False
@@ -200,8 +199,6 @@ async def _scan_async(
     async with _scan_lock:
         # Lazy imports to avoid heavy startup cost when running other commands
         from Option_Alpha.analysis import (
-            apply_catalyst_adjustment,
-            catalyst_proximity_score,
             determine_direction,
             filter_liquid_tickers,
             recommend_contract,
@@ -528,55 +525,10 @@ async def _scan_async(
                     raise typer.Exit(code=0)
 
                 # ---------------------------------------------------------------
-                # Phase 3: Catalyst proximity scoring
-                # ---------------------------------------------------------------
-                console.print("\n[bold cyan]Phase 3/5: Evaluating earnings catalysts[/bold cyan]")
-
-                today = datetime.date.today()
-                try:
-                    # Apply catalyst adjustment to all tickers.
-                    # Without a real earnings calendar, use neutral proximity.
-                    scored_tickers = [
-                        TickerScore(
-                            ticker=t.ticker,
-                            score=apply_catalyst_adjustment(
-                                t.score,
-                                catalyst_proximity_score(
-                                    next_earnings=None,
-                                    reference_date=today,
-                                ),
-                            ),
-                            signals=t.signals,
-                            rank=t.rank,
-                        )
-                        for t in scored_tickers
-                    ]
-
-                    # Re-sort and re-rank after catalyst adjustment
-                    scored_tickers.sort(key=lambda t: t.score, reverse=True)
-                    scored_tickers = [
-                        TickerScore(
-                            ticker=t.ticker,
-                            score=t.score,
-                            signals=t.signals,
-                            rank=rank,
-                        )
-                        for rank, t in enumerate(scored_tickers, start=1)
-                    ]
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning("Catalyst scoring failed (continuing): %s", exc)
-
-                console.print(f"  Catalyst adjustment applied to {len(scored_tickers)} tickers")
-
-                if _scan_cancelled:
-                    console.print("[yellow]Scan cancelled after Phase 3.[/yellow]")
-                    raise typer.Exit(code=0)
-
-                # ---------------------------------------------------------------
-                # Phase 4: Fetch option chains for top N
+                # Phase 3: Fetch option chains for top N
                 # ---------------------------------------------------------------
                 console.print(
-                    f"\n[bold cyan]Phase 4/5: Fetching option chains (top {top_n})[/bold cyan]"
+                    f"\n[bold cyan]Phase 3/4: Fetching option chains (top {top_n})[/bold cyan]"
                 )
 
                 top_tickers = filter_liquid_tickers(scored_tickers, ohlcv_data, top_n)
@@ -611,13 +563,13 @@ async def _scan_async(
                 console.print(f"  Found option recommendations for {len(options_results)} tickers")
 
                 if _scan_cancelled:
-                    console.print("[yellow]Scan cancelled after Phase 4.[/yellow]")
+                    console.print("[yellow]Scan cancelled after Phase 3.[/yellow]")
                     raise typer.Exit(code=0)
 
                 # ---------------------------------------------------------------
-                # Phase 5: Persist results
+                # Phase 4: Persist results
                 # ---------------------------------------------------------------
-                console.print("\n[bold cyan]Phase 5/5: Persisting results[/bold cyan]")
+                console.print("\n[bold cyan]Phase 4/4: Persisting results[/bold cyan]")
 
                 from Option_Alpha.models.scan import ScanRun
 

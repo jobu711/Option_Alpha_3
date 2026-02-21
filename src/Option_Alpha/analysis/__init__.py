@@ -5,7 +5,6 @@ Re-exports all public functions so consumers can import directly:
 """
 
 from Option_Alpha.analysis.bsm import bsm_greeks, bsm_price, implied_volatility
-from Option_Alpha.analysis.catalysts import apply_catalyst_adjustment, catalyst_proximity_score
 from Option_Alpha.analysis.contracts import (
     filter_contracts,
     filter_liquid_tickers,
@@ -22,9 +21,6 @@ __all__ = [
     "bsm_greeks",
     "bsm_price",
     "implied_volatility",
-    # Catalysts
-    "apply_catalyst_adjustment",
-    "catalyst_proximity_score",
     # Contracts
     "filter_contracts",
     "filter_liquid_tickers",

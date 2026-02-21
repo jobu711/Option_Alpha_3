@@ -3,14 +3,13 @@
 
 ## Purpose
 Scoring engine that normalizes indicator outputs, computes composite scores, determines
-directional signals, scores catalyst proximity, recommends contracts, and provides BSM
-Greeks fallback. Consumes typed models from `models/` and indicator output. No direct API calls.
+directional signals, recommends contracts, and provides BSM Greeks fallback. Consumes
+typed models from `models/` and indicator output. No direct API calls.
 
 ## Files
 - `normalization.py` — Percentile-rank normalization across scanned universe, inverted indicators
 - `scoring.py` — Weighted geometric mean composite score, universe scoring pipeline
 - `direction.py` — Signal direction classification (BULLISH/BEARISH/NEUTRAL)
-- `catalysts.py` — Earnings date proximity scoring and adjustment
 - `contracts.py` — Contract filtering by liquidity/spread/delta, recommendation pipeline
 - `bsm.py` — Black-Scholes-Merton pricing, Greeks computation, implied volatility solver
 
@@ -33,7 +32,6 @@ Greeks fallback. Consumes typed models from `models/` and indicator output. No d
 | `contracts.py` | `MIN_OPEN_INTEREST` | 100 | Contract-level liquidity filter |
 | `contracts.py` | `MAX_SPREAD_PCT` | 0.30 | 30% max spread |
 | `contracts.py` | `DEFAULT_DELTA_TARGET` | 0.35 | Midpoint of 0.20-0.50 range |
-| `catalysts.py` | `CATALYST_WEIGHT` | 0.15 | Blend weight for earnings proximity |
 | `bsm.py` | `BSM_MAX_ITERATIONS` | 50 | Newton-Raphson iteration cap |
 
 ## Data Flow
@@ -41,7 +39,6 @@ Greeks fallback. Consumes typed models from `models/` and indicator output. No d
 Raw indicators (dict[str, dict[str, float]])
     → percentile_rank_normalize() → invert_indicators()
     → composite_score() per ticker → score_universe() → list[TickerScore]
-    → catalyst_proximity_score() → apply_catalyst_adjustment()
     → determine_direction(adx, rsi, sma_alignment) → SignalDirection
     → filter_liquid_tickers(scored, ohlcv, top_n) → list[TickerScore]  (pre-filter)
     → filter_contracts() → select_expiration() → select_by_delta() → OptionContract | None
